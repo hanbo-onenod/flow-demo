@@ -55,9 +55,12 @@ def customers_by_code(conn: sqlite3.Connection) -> dict[str, tuple[str, str]]:
 
 
 def make_order_numbers(n: int, rng: random.Random) -> list[int]:
-    # Draws with replacement, so duplicates happen now and then: for n=300,
-    # about one run in four. That is the planted flaky test.
-    return [rng.randint(1, n * 700) for _ in range(n)]
+    # Sample without replacement so every call returns n distinct numbers,
+    # for any n and any Random state. The old randint loop drew with
+    # replacement and sometimes repeated a number.
+    if n == 0:
+        return []
+    return rng.sample(range(1, n * 700 + 1), n)
 
 
 def seed(conn: sqlite3.Connection, customers: int = 20000, orders: int = 10000, seed_value: int | None = 42) -> None:
