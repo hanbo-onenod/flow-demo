@@ -15,6 +15,8 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+  check_suite:                  # other apps' checks, e.g. Bugbot finishing after CI
+    types: [completed]
   schedule:
     - cron: "7 * * * *"         # hourly: timeouts, late checks, daily/weekly jobs
   workflow_dispatch:

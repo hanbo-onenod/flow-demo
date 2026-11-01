@@ -67,6 +67,7 @@ class Router:
             "pull_request": self.on_pull_request,
             "pull_request_review": self.on_review,
             "workflow_run": self.on_workflow_run,
+            "check_suite": self.on_check_suite,
             "schedule": lambda _p: self.on_schedule(),
             "workflow_dispatch": self.on_dispatch,
         }.get(event_name)
@@ -421,6 +422,14 @@ class Router:
         if run.get("name") != "CI" or run.get("status") != "completed":
             return
         for ref in run.get("pull_requests", []):
+            self.evaluate_checks(self.gh.pr(ref["number"]))
+
+    def on_check_suite(self, payload: dict) -> None:
+        """Another app's checks (for example Bugbot) finished after CI did."""
+        suite = payload["check_suite"]
+        if suite.get("status") != "completed":
+            return
+        for ref in suite.get("pull_requests", []):
             self.evaluate_checks(self.gh.pr(ref["number"]))
 
     def evaluate_checks(self, pr: dict) -> None:
