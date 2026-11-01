@@ -21,6 +21,7 @@ label source:minutes   bfdadc "Came from meeting minutes"
 label source:doc       bfdadc "Came from a requirements document"
 label source:feedback  bfdadc "Came from user feedback"
 label source:flow      bfdadc "Came from inside the flow (failed acceptance, review)"
+label flow:seen        ededed "Set by the flow router once it has handled a new candidate"
 
 if [[ "${2:-}" == "--feedback" ]]; then
   python3 - "$REPO" <<'EOF'

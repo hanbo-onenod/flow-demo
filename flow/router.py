@@ -32,6 +32,7 @@ CHAT_CONFIRM = re.compile(r"^/confirmed-via-(card|slack) by @(\S+) at (\S+)(?:.*
 # The Team Chief relays a person's Slack answer to the issue with this prefix.
 RELAYED_ANSWER = re.compile(r"^Answer from @(\S+) \(via Slack")
 SLACK_MERGE = re.compile(r"^/merge-via-slack by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
+SEEN_LABEL = "flow:seen"  # set by the router once it has handled a new candidate
 SLACK_LINE = re.compile(r"^Slack thread:\s*(\S+)", re.MULTILINE)
 PASSING = {"success", "neutral", "skipped"}
 # Fields only the router writes. A bot PR based on an older version of the task
@@ -190,18 +191,27 @@ class Router:
         return True
 
     def on_issues(self, payload: dict) -> None:
-        issue, action = payload["issue"], payload["action"]
-        labels = self.labels(issue)
-        if "candidate" not in labels:
+        action = payload["action"]
+        if action not in ("opened", "labeled"):
             return
-        if action == "opened":
-            if labels & {"source:minutes", "source:doc"}:
-                self.apply("intake.opened", issue=issue, note="New minutes or document to split")
-            else:
-                self.ensure_thread(issue)
-                self.apply("candidate.opened", issue=issue, note="New candidate, please accept, merge, defer or reject")
-        elif action == "labeled" and payload.get("label", {}).get("name") == "accepted":
-            self.apply("candidate.accepted", issue=issue, note="Requirement owner accepted this candidate")
+        if action == "labeled" and payload.get("label", {}).get("name") == "accepted":
+            if "candidate" in self.labels(payload["issue"]):
+                self.apply("candidate.accepted", issue=payload["issue"], note="Requirement owner accepted this candidate")
+            return
+        # A bot may open the issue first and add labels afterwards, so look at
+        # the issue as it is now, and handle each new candidate exactly once.
+        issue = self.gh.issue(payload["issue"]["number"]) or payload["issue"]
+        labels = self.labels(issue)
+        if "candidate" not in labels or SEEN_LABEL in labels:
+            return
+        self.fx.add_label(issue["number"], SEEN_LABEL)
+        if labels & {"source:minutes", "source:doc"}:
+            self.apply("intake.opened", issue=issue, note="New minutes or document to split")
+        elif "deferred" in labels:
+            self.fx.slack_board(f"#{issue['number']} · candidate.deferred · {issue.get('title', '')}")
+        else:
+            self.ensure_thread(issue)
+            self.apply("candidate.opened", issue=issue, note="New candidate, please accept, merge, defer or reject")
 
     def on_issue_comment(self, payload: dict) -> None:
         issue, comment = payload["issue"], payload["comment"]
