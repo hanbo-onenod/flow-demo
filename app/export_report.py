@@ -3,8 +3,9 @@
 Usage:
     python -m app.export_report out.csv [--db path.sqlite]
 
+The file starts with a UTF-8 BOM so Excel on Windows and Mac shows Chinese names.
+
 Known problems (planted for the demo, do not fix them outside a task):
-- Excel shows Chinese names as garbage: the CSV has no UTF-8 BOM.
 - No date filter and no Excel export.
 """
 from __future__ import annotations
@@ -38,7 +39,10 @@ def fetch_rows(conn: sqlite3.Connection) -> list[list[str]]:
 
 def export_csv(conn: sqlite3.Connection, path: str) -> int:
     rows = fetch_rows(conn)
+    # Leading U+FEFF is the UTF-8 BOM (EF BB BF). Excel uses it to detect UTF-8.
+    # Everything after it is the same csv.writer output as before this change.
     with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write("\ufeff")
         writer = csv.writer(f)
         writer.writerow(HEADER)
         writer.writerows(rows)
