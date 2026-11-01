@@ -36,7 +36,7 @@ SLACK_LINE = re.compile(r"^Slack thread:\s*(\S+)", re.MULTILINE)
 PASSING = {"success", "neutral", "skipped"}
 # Fields only the router writes. A bot PR based on an older version of the task
 # file must not overwrite them.
-ROUTER_FIELDS = ("failures", "confirmation", "checked_sha", "reminded_status", "notified_status", "created", "updated")
+ROUTER_FIELDS = ("failures", "confirmation", "checked_sha", "checked_runs", "reminded_status", "notified_status", "created", "updated")
 
 
 def parse_time(value) -> datetime:
@@ -67,6 +67,7 @@ class Router:
             "pull_request": self.on_pull_request,
             "pull_request_review": self.on_review,
             "workflow_run": self.on_workflow_run,
+            "check_suite": self.on_check_suite,
             "schedule": lambda _p: self.on_schedule(),
             "workflow_dispatch": self.on_dispatch,
         }.get(event_name)
@@ -423,19 +424,32 @@ class Router:
         for ref in run.get("pull_requests", []):
             self.evaluate_checks(self.gh.pr(ref["number"]))
 
+    def on_check_suite(self, payload: dict) -> None:
+        """Another app's checks (for example Bugbot) finished after CI did."""
+        suite = payload["check_suite"]
+        if suite.get("status") != "completed":
+            return
+        for ref in suite.get("pull_requests", []):
+            self.evaluate_checks(self.gh.pr(ref["number"]))
+
     def evaluate_checks(self, pr: dict) -> None:
         task_id = taskfile.task_from_pr_body(pr.get("body"))
         if not task_id or not self.task_exists(task_id):
             return
         meta, body = taskfile.load(self.repo_dir, task_id)
         sha = pr["head"]["sha"]
-        if meta.get("status") not in ("in-progress", "awaiting-merge") or meta.get("checked_sha") == sha:
+        if meta.get("status") not in ("in-progress", "awaiting-merge"):
             return
         states = self.gh.check_states(sha)
-        if not states or any(status != "completed" for status, _ in states):
-            return  # still running; the hourly sweep looks again
-        meta["checked_sha"] = sha
-        if all(conclusion in PASSING for _, conclusion in states):
+        if not states or any(state[0] != "completed" for state in states):
+            return  # still running; check_suite or the hourly sweep looks again
+        # One evaluation per set of check runs: a re-run on the same commit
+        # has new run ids, so it is evaluated, but the same result is not counted twice.
+        runs = sha + ":" + ",".join(sorted(str(state[2]) if len(state) > 2 else f"{state[0]}/{state[1]}" for state in states))
+        if meta.get("checked_runs") == runs:
+            return
+        meta["checked_sha"], meta["checked_runs"] = sha, runs
+        if all(state[1] in PASSING for state in states):
             taskfile.save(self.repo_dir, task_id, meta, body)
             self.fx.commit(f"{task_id}: checks passed on {sha[:7]}")
             if meta.get("status") == "in-progress":

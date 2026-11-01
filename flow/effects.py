@@ -198,6 +198,7 @@ class GitHubReader:
             return None
         return base64.b64decode(data["content"]).decode()
 
-    def check_states(self, sha: str) -> list[tuple[str, str | None]]:
-        runs = self._get(f"/commits/{sha}/check-runs?per_page=100")["check_runs"]
-        return [(r["status"], r["conclusion"]) for r in runs]
+    def check_states(self, sha: str) -> list[tuple[str, str | None, int]]:
+        """Latest run of each check on the commit: (status, conclusion, run id)."""
+        runs = self._get(f"/commits/{sha}/check-runs?per_page=100&filter=latest")["check_runs"]
+        return [(r["status"], r["conclusion"], r["id"]) for r in runs]

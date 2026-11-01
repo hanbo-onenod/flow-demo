@@ -348,3 +348,28 @@ def test_slack_merge_waits_for_checks_on_the_latest_commit(env):
     merge_comment(router)
     assert "merge_code_pr" not in fx.names()
     assert any(c[0] == "comment" and "checks have not all passed" in c[2] for c in fx.calls)
+
+
+def test_late_bugbot_result_is_picked_up_without_waiting_for_the_sweep(env):
+    router, gh, fx, tmp_path = env
+    write_task(tmp_path, "in-progress")
+    code_pr(gh)
+    gh.checks["abc1234"] = [("completed", "success"), ("in_progress", None)]
+    router.handle("workflow_run", {"workflow_run": {"name": "CI", "status": "completed", "pull_requests": [{"number": 20}]}})
+    assert status_of(tmp_path)["status"] == "in-progress"
+    gh.checks["abc1234"] = [("completed", "success"), ("completed", "success")]
+    router.handle("check_suite", {"check_suite": {"status": "completed", "pull_requests": [{"number": 20}]}})
+    assert status_of(tmp_path)["status"] == "awaiting-merge"
+
+
+def test_rerun_on_the_same_commit_is_evaluated(env):
+    router, gh, fx, tmp_path = env
+    write_task(tmp_path, "in-progress")
+    code_pr(gh)
+    run = {"workflow_run": {"name": "CI", "status": "completed", "pull_requests": [{"number": 20}]}}
+    gh.checks["abc1234"] = [("completed", "failure", 1), ("completed", "success", 2)]
+    router.handle("workflow_run", run)
+    gh.checks["abc1234"] = [("completed", "success", 3), ("completed", "success", 2)]  # re-run of CI
+    router.handle("workflow_run", run)
+    meta = status_of(tmp_path)
+    assert meta["failures"] == 1 and meta["status"] == "awaiting-merge"
