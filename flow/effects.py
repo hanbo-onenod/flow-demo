@@ -214,6 +214,12 @@ class GitHubReader:
     def pr_files(self, number: int) -> list[str]:
         return [f["filename"] for f in self._get(f"/pulls/{number}/files?per_page=100")]
 
+    def merge_base(self, base_sha: str, head_sha: str) -> str | None:
+        try:
+            return self._get(f"/compare/{base_sha}...{head_sha}")["merge_base_commit"]["sha"]
+        except (RuntimeError, KeyError):
+            return None
+
     def issue(self, number: int) -> dict | None:
         try:
             return self._get(f"/issues/{number}")

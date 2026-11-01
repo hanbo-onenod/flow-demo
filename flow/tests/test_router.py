@@ -467,3 +467,38 @@ def test_stuck_acceptance_reminds_the_admin(env):
     write_task(tmp_path, "awaiting-acceptance", updated=(NOW - timedelta(hours=3)).isoformat())
     router.handle("schedule", {})
     assert any(c[0] == "slack_thread" and "awaiting-acceptance for over 2h" in c[2] for c in fx.calls)
+
+
+def test_stale_pause_pr_does_not_overwrite_a_newer_plan(env):
+    """Replays T-004: the plan PR lands, then a pause PR based on the older file."""
+    router, gh, fx, tmp_path = env
+    original = task_text("in-progress").replace("## Log", "## Plan\n\nFilled in by the dev lead.\n\n## Log")
+    planned = original.replace("Filled in by the dev lead.", "1. Add --start/--end (agent A)")
+    paused_from_old = original.replace("status: in-progress", "status: paused").replace(
+        "## Log\n\n", "## Log\n\n- Team Chief: PAUSED: scope change\n")
+    (tmp_path / "tasks" / "T-001.md").write_text(original, encoding="utf-8")
+
+    plan_pr = gh.add_pr(60, "flow-demo-bot", ["tasks/T-001.md"], heads={"tasks/T-001.md": planned},
+                        bases={"tasks/T-001.md": original})
+    router.handle("pull_request", {"action": "opened", "pull_request": plan_pr})
+    pause_pr = gh.add_pr(61, "flow-demo-bot", ["tasks/T-001.md"], heads={"tasks/T-001.md": paused_from_old},
+                         bases={"tasks/T-001.md": original})
+    router.handle("pull_request", {"action": "opened", "pull_request": pause_pr})
+
+    meta, body = taskfile.load(str(tmp_path), "T-001")
+    assert meta["status"] == "paused" and meta["paused_from"] == "in-progress"
+    assert "1. Add --start/--end (agent A)" in body          # the newer plan survived
+    assert "PAUSED: scope change" in body                    # the pause note arrived
+
+
+def test_stale_plan_pr_does_not_undo_a_status_change(env):
+    """A plan PR based on an older file must not move the status back either."""
+    router, gh, fx, tmp_path = env
+    original = task_text("in-progress")
+    (tmp_path / "tasks" / "T-001.md").write_text(original.replace("status: in-progress", "status: awaiting-merge"), encoding="utf-8")
+    planned = original.replace("Faster.", "Faster, with a plan.")
+    pr = gh.add_pr(62, "flow-demo-bot", ["tasks/T-001.md"], heads={"tasks/T-001.md": planned},
+                   bases={"tasks/T-001.md": original})
+    router.handle("pull_request", {"action": "opened", "pull_request": pr})
+    meta, body = taskfile.load(str(tmp_path), "T-001")
+    assert meta["status"] == "awaiting-merge" and "Faster, with a plan." in body
