@@ -32,9 +32,9 @@ The router sends this JSON to the bot's Grok webhook:
 {
   "bot": "product",
   "event": "candidate.accepted",
-  "repo": "OWNER/flow-demo",
+  "repo": "hanbo-onenod/flow-demo",
   "task": "T-001",
-  "issue": "https://github.com/OWNER/flow-demo/issues/12",
+  "issue": "https://github.com/hanbo-onenod/flow-demo/issues/12",
   "pr": null,
   "slack_thread": "https://WORKSPACE.slack.com/archives/C0123/p1730000000000000",
   "rulebook": "bots/product.md",

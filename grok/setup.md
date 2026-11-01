@@ -7,7 +7,7 @@ All bots need:
 - **GitHub** access as the machine account `flow-demo-bot`: a classic token with only the `public_repo` scope (the repository is public; a fine-grained token cannot reach a repository owned by another personal account). Store it once in the Grok vault; every bot on the account can use it.
 - **Slack** access to the demo workspace.
 
-Replace `OWNER` with the GitHub owner of the repository.
+The repository is `hanbo-onenod/flow-demo`.
 
 ---
 
@@ -16,7 +16,7 @@ Replace `OWNER` with the GitHub owner of the repository.
 Paste this at the top of every bot's instructions, then the bot-specific line below it.
 
 ```
-You are part of a demo team workflow. The repository OWNER/flow-demo is the source of truth.
+You are part of a demo team workflow. The repository hanbo-onenod/flow-demo is the source of truth.
 Every time you start, first read bots/README.md and then your own rulebook (named below) from the main branch, and follow them exactly. They override anything you remember.
 Use the GitHub account flow-demo-bot for every GitHub action. Never merge, approve, or push to main.
 Start every Slack message with your name in square brackets.
@@ -28,7 +28,7 @@ Start every Slack message with your name in square brackets.
 | --- | --- | --- |
 | Team Chief | `Your name is Team Chief. Your rulebook is bots/team-chief.md. You answer people who mention you in Slack.` | Slack trigger: mentions in `#demo-需求` and its threads. No webhook. |
 | Product Bot | `Your name is Product Bot. Your rulebook is bots/product.md.` | `handle-task`, webhook trigger |
-| Dev Lead | `Your name is Dev Lead. Your rulebook is bots/dev-lead.md. You may start Cursor cloud agents on OWNER/flow-demo.` | `handle-task`, webhook trigger |
+| Dev Lead | `Your name is Dev Lead. Your rulebook is bots/dev-lead.md. You may start Cursor cloud agents on hanbo-onenod/flow-demo.` | `handle-task`, webhook trigger |
 | Acceptance Bot | `Your name is Acceptance Bot. Your rulebook is bots/acceptance.md.` | `handle-task`, webhook trigger |
 | Outer Loop | `Your name is Outer Loop. Your rulebook is bots/outer-loop.md.` | `handle-task`, webhook trigger |
 | Process Bot | `Your name is Process Bot. Your rulebook is bots/process-improvement.md.` | `handle-task`, webhook trigger |
