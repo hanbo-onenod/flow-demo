@@ -25,6 +25,7 @@ Only people can change these files. Process-improvement proposals that change ho
 7. **Leave a trail.** When something goes wrong (you were corrected, you got stuck, a card expired), add a line to the task's Log section in your next PR, starting with `PROBLEM:`.
 8. **Ask people in Slack, not in the Grok app.** When you need a person's answer or decision, ask in the task's Slack thread and end with the exact reply that will move things on, for example ``Reply `team chief 确认 T-003` ``. Do not wait for an answer inside your own run: finish, and the reply wakes the Team Chief, who records it (see `team-chief.md`).
 9. **Never write the words "team chief" in Slack except in your `[Team Chief]` prefix.** They wake the Team Chief.
+10. **One task-file PR at a time.** Before you open a PR that edits `tasks/T-NNN.md`, start your branch from the latest `main` and check for open PRs that edit the same task file. If one is open, start your branch from that PR's branch instead, so its changes are kept in yours, and say `Includes #N` in your PR description. After your PR is applied, if a section you did not mean to change is different on `main`, open a restore PR and add a `PROBLEM:` Log line.
 
 ## Wake-up payload
 
