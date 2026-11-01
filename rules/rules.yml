@@ -77,7 +77,7 @@ limits:
 
 timeouts_hours:               # remind the role on the right if a task sits in a status this long
   awaiting-confirmation: { hours: 2, remind: confirmer }
-  awaiting-merge:        { hours: 4, remind: merger }
+  awaiting-merge:        { hours: 0.05, remind: merger }   # TEMPORARY: scenario 5 timeout drill, revert to 4
   acceptance-proposed:   { hours: 4, remind: confirmer }
   in-progress:           { hours: 8, remind: confirmer }
 
