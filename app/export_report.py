@@ -27,11 +27,13 @@ HEADER = ["order_no", "order_date", "customer", "city", "amount"]
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-def _coerce_date(value: date | str | None) -> date | None:
+def _coerce_date(value: date | str | None, *, name: str) -> date | None:
     """Return a calendar date, or None when this bound is omitted.
 
     Strings must be real ``YYYY-MM-DD`` dates. ``datetime.date`` values are
-    accepted as-is. Anything else raises ``ValueError`` naming the bad value.
+    accepted as-is. Anything else raises ``ValueError`` naming ``name``
+    (the ``start``/``end`` argument, or the ``--start``/``--end`` option),
+    the bad value, and ``YYYY-MM-DD``.
     """
     if value is None:
         return None
@@ -47,15 +49,18 @@ def _coerce_date(value: date | str | None) -> date | None:
         if parsed is not None and parsed.isoformat() == value:
             return parsed
     shown = value if isinstance(value, str) else repr(value)
-    raise ValueError(f"invalid date {shown}: expected YYYY-MM-DD")
+    raise ValueError(f"invalid {name} date {shown}: expected YYYY-MM-DD")
 
 
 def _validated_range(
     start: date | str | None,
     end: date | str | None,
+    *,
+    start_name: str = "start",
+    end_name: str = "end",
 ) -> tuple[date | None, date | None]:
-    start_d = _coerce_date(start)
-    end_d = _coerce_date(end)
+    start_d = _coerce_date(start, name=start_name)
+    end_d = _coerce_date(end, name=end_name)
     if start_d is not None and end_d is not None and start_d > end_d:
         raise ValueError(
             "the start date is after the end date "
@@ -139,7 +144,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", default=None, help="SQLite file; default is a freshly seeded in-memory demo DB")
     args = parser.parse_args(argv)
     try:
-        start, end = _validated_range(args.start, args.end)
+        start, end = _validated_range(
+            args.start, args.end, start_name="--start", end_name="--end"
+        )
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 1

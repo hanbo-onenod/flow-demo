@@ -225,8 +225,7 @@ def test_cli_rejects_invalid_date(tmp_path, capsys, flag, value):
     code = export_report.main([str(out), flag, value])
     err = capsys.readouterr().err
     assert code != 0
-    assert value in err
-    assert "YYYY-MM-DD" in err
+    assert err == f"invalid {flag} date {value}: expected YYYY-MM-DD\n"
     assert out.read_bytes() == b"keep-me"
 
 
@@ -256,14 +255,60 @@ def test_function_rejects_invalid_date(demo_db, tmp_path, kwargs):
     out = tmp_path / "bad.csv"
     missing = tmp_path / "missing.csv"
     out.write_bytes(b"keep-me")
-    bad = next(iter(kwargs.values()))
+    name, bad = next(iter(kwargs.items()))
     with pytest.raises(ValueError) as exc:
         export_report.export_csv(demo_db, str(out), **kwargs)
-    assert bad in str(exc.value)
-    assert "YYYY-MM-DD" in str(exc.value)
+    assert str(exc.value) == f"invalid {name} date {bad}: expected YYYY-MM-DD"
     assert out.read_bytes() == b"keep-me"
     with pytest.raises(ValueError):
         export_report.export_csv(demo_db, str(missing), **kwargs)
+    assert not missing.exists()
+
+
+@pytest.mark.parametrize(
+    "start, end, flag, bad",
+    [
+        ("2026/03/01", "2026-03-31", "--start", "2026/03/01"),
+        ("2026-03-01", "2026/03/31", "--end", "2026/03/31"),
+        ("2026/03/01", "abc", "--start", "2026/03/01"),
+        ("not-a-date", "2026-02-30", "--start", "not-a-date"),
+    ],
+)
+def test_cli_names_the_invalid_option_when_both_are_given(
+    tmp_path, capsys, start, end, flag, bad
+):
+    """With both bounds set, the message names the option that is wrong."""
+    out = tmp_path / "bad.csv"
+    out.write_bytes(b"keep-me")
+    code = export_report.main([str(out), "--start", start, "--end", end])
+    err = capsys.readouterr().err
+    assert code != 0
+    assert err == f"invalid {flag} date {bad}: expected YYYY-MM-DD\n"
+    other = "--end" if flag == "--start" else "--start"
+    assert other not in err
+    assert out.read_bytes() == b"keep-me"
+
+
+@pytest.mark.parametrize(
+    "start, end, name, bad",
+    [
+        ("2026/03/01", "2026-03-31", "start", "2026/03/01"),
+        ("2026-03-01", "2026/03/31", "end", "2026/03/31"),
+        ("2026-02-30", "2026-3-1", "start", "2026-02-30"),
+        ("2026-03-01", "abc", "end", "abc"),
+    ],
+)
+def test_function_names_the_invalid_argument(demo_db, tmp_path, start, end, name, bad):
+    out = tmp_path / "bad.csv"
+    missing = tmp_path / "missing.csv"
+    out.write_bytes(b"keep-me")
+    with pytest.raises(ValueError) as exc:
+        export_report.export_csv(demo_db, str(out), start=start, end=end)
+    assert str(exc.value) == f"invalid {name} date {bad}: expected YYYY-MM-DD"
+    assert out.read_bytes() == b"keep-me"
+    with pytest.raises(ValueError) as missing_exc:
+        export_report.export_csv(demo_db, str(missing), start=start, end=end)
+    assert str(missing_exc.value) == f"invalid {name} date {bad}: expected YYYY-MM-DD"
     assert not missing.exists()
 
 
