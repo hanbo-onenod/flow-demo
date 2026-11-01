@@ -91,10 +91,9 @@ class LiveEffects:
         url = self.env.get(BOT_ENV[bot], "")
         if not url:
             return self._skip(f"wake {bot}")
-        headers = {}
-        token = self.env.get("GROK_WEBHOOK_TOKEN", "")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        # Each Grok routine has its own key; GROK_WEBHOOK_KEY_<BOT> wins over a shared one.
+        key = self.env.get(BOT_ENV[bot].replace("GROK_WEBHOOK_", "GROK_WEBHOOK_KEY_"), "") or self.env.get("GROK_WEBHOOK_TOKEN", "")
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
         _http_json("POST", url, payload, headers)
         print(f"woke {bot} for {payload.get('event')}")
 
