@@ -26,7 +26,12 @@ RULEBOOKS = {
     "outer_loop": "bots/outer-loop.md",
     "process_improvement": "bots/process-improvement.md",
 }
-CARD_CONFIRM = re.compile(r"^/confirmed-via-card by @(\S+) at (\S+)", re.MULTILINE)
+# Confirmations made in chat (an approval card, or a reply in the Slack thread)
+# are written to the PR by the Team Chief as one of these lines.
+CHAT_CONFIRM = re.compile(r"^/confirmed-via-(card|slack) by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
+# The Team Chief relays a person's Slack answer to the issue with this prefix.
+RELAYED_ANSWER = re.compile(r"^Answer from @(\S+) \(via Slack")
+SLACK_MERGE = re.compile(r"^/merge-via-slack by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
 SLACK_LINE = re.compile(r"^Slack thread:\s*(\S+)", re.MULTILINE)
 PASSING = {"success", "neutral", "skipped"}
 # Fields only the router writes. A bot PR based on an older version of the task
@@ -129,6 +134,9 @@ class Router:
         if rule.get("notify"):
             who = self.mention(self.role_login(rule["notify"], meta))
             text = f"[Flow] {label} {title}: {note or key}. {who}"
+            if rule.get("hint"):
+                number = (pr or issue or {}).get("number", "")
+                text += " " + rule["hint"].format(label=label, number=number)
             if pr_url or issue_url:
                 text += f" {pr_url or issue_url}"
             self.fx.slack_thread(thread, text)
@@ -180,13 +188,22 @@ class Router:
         issue, comment = payload["issue"], payload["comment"]
         author = comment["user"]["login"]
         if "pull_request" in issue:
-            match = CARD_CONFIRM.search(comment.get("body") or "")
-            if match and author in self.bot_logins:
-                self.confirm_task_pr(issue["number"], match.group(1), "approval-card", comment["html_url"], match.group(2))
+            body = comment.get("body") or ""
+            if author not in self.bot_logins:
+                return
+            confirm, merge = CHAT_CONFIRM.search(body), SLACK_MERGE.search(body)
+            if confirm:
+                via = "approval-card" if confirm.group(1) == "card" else "slack"
+                evidence = confirm.group(4) or comment["html_url"]
+                self.confirm_task_pr(issue["number"], confirm.group(2), via, evidence, confirm.group(3))
+            elif merge:
+                self.merge_via_slack(issue["number"], merge.group(1), merge.group(2), merge.group(3) or comment["html_url"])
             return
         labels = self.labels(issue)
-        if {"candidate", "clarifying"} <= labels and author not in self.bot_logins:
-            self.apply("candidate.human_reply", issue=issue, note=f"{author} replied")
+        relayed = author in self.bot_logins and RELAYED_ANSWER.match(comment.get("body") or "")
+        if {"candidate", "clarifying"} <= labels and (author not in self.bot_logins or relayed):
+            who = relayed.group(1) if relayed else author
+            self.apply("candidate.human_reply", issue=issue, note=f"{who} replied")
 
     # ---------- task PRs (tasks/ and records/ only) ----------
 
@@ -286,7 +303,10 @@ class Router:
         meta = taskfile.parse(head)[0] if head else {}
         thread = meta.get("slack_thread", "")
         who = self.mention(meta.get("confirmer") or self.role_login("confirmer", None))
-        self.fx.slack_thread(thread, f"[Flow] {task_id} {meta.get('title', '')}: {who}, please review and approve on GitHub. {pr['html_url']}")
+        verb = "验收" if meta.get("status") == "acceptance-proposed" else "确认"
+        self.fx.slack_thread(thread, f"[Flow] {task_id} {meta.get('title', '')}: {who}, please review. "
+                                     f"Reply here `team chief {verb} {task_id}` (or `team chief 不要 {task_id}: reason`), "
+                                     f"or approve on GitHub. {pr['html_url']}")
         self.fx.slack_board(f"{task_id} · task_pr.opened · {meta.get('title', '')}")
 
     def on_review(self, payload: dict) -> None:
@@ -346,12 +366,55 @@ class Router:
         task_id = taskfile.task_from_pr_body(pr.get("body"))
         if not task_id or not self.task_exists(task_id):
             return
-        still_open = [p for p in self.gh.open_prs() if taskfile.task_from_pr_body(p.get("body")) == task_id]
+        self.after_code_merge(task_id, pr)
+
+    def after_code_merge(self, task_id: str, pr: dict) -> None:
+        still_open = [p for p in self.gh.open_prs()
+                      if taskfile.task_from_pr_body(p.get("body")) == task_id and p["number"] != pr["number"]]
         if still_open:
             self.fx.slack_board(f"{task_id} · code PR merged, {len(still_open)} still open")
             return
         if taskfile.load(self.repo_dir, task_id)[0].get("status") in ("in-progress", "awaiting-merge"):
             self.apply("code_pr.merged", task_id, pr=pr, note="All code merged, acceptance starts")
+
+    def merge_risk(self, meta: dict, files: list[str]) -> tuple[str, str]:
+        policy = self.rules.get("merge_policy", {})
+        for path in files:
+            if path.startswith(tuple(policy.get("github_only_paths", []))):
+                return "high", f"it changes {path}"
+        risk = meta.get("risk") or policy.get("default_risk", "medium")
+        return risk, "the task package says so" if meta.get("risk") else "no risk level was set"
+
+    def merge_via_slack(self, number: int, login: str, at: str, evidence: str) -> None:
+        """A person said `team chief 合并 #N` in Slack; merge it if the policy allows."""
+        pr = self.gh.pr(number)
+        task_id = taskfile.task_from_pr_body(pr.get("body"))
+        if not task_id or not self.task_exists(task_id):
+            self.fx.comment(number, "[Flow] Not merged: this PR has no `Task: T-NNN` line linking it to a task.")
+            return
+        meta, body = taskfile.load(self.repo_dir, task_id)
+        merger = self.role_login("merger", meta)
+        risk, why = self.merge_risk(meta, self.gh.pr_files(number))
+        allowed = self.rules.get("merge_policy", {}).get("slack_merge_allowed_risk", [])
+        refusal = None
+        if login != merger:
+            refusal = f"only the merger @{merger} can merge, not @{login}"
+        elif meta.get("status") != "awaiting-merge" or meta.get("checked_sha") != pr["head"]["sha"]:
+            refusal = "checks have not all passed on the latest commit yet"
+        elif risk not in allowed:
+            refusal = f"this change is {risk} risk ({why}), so it has to be merged on GitHub"
+        if refusal:
+            self.fx.comment(number, f"[Flow] Not merged from Slack: {refusal}.")
+            self.fx.slack_thread(meta.get("slack_thread", ""), f"[Flow] {task_id}: not merged from Slack: {refusal}. {pr['html_url']}")
+            self.record_problem("slack-merge-refused", task_id, refusal, evidence)
+            self.fx.commit(f"records: slack-merge-refused {task_id}")
+            return
+        self.fx.merge_code_pr(number, f"Merge PR #{number} via Slack by @{login}\n\nEvidence: {evidence}")
+        body = taskfile.append_log(body, f"router: PR #{number} merged via Slack by @{login} at {at} ({risk} risk), evidence {evidence}")
+        taskfile.save(self.repo_dir, task_id, meta, body)
+        self.fx.commit(f"{task_id}: PR #{number} merged via Slack")
+        self.fx.comment(number, f"[Flow] Merged by the router on behalf of @{login} (Slack, {risk} risk). Evidence: {evidence}")
+        self.after_code_merge(task_id, pr)
 
     def on_workflow_run(self, payload: dict) -> None:
         run = payload["workflow_run"]

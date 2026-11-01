@@ -273,3 +273,78 @@ def test_bot_pr_from_stale_branch_keeps_router_fields_and_log(env):
     assert meta["failures"] == 2 and meta["confirmation"]["by"] == "carol"
     assert "router: something happened" in body and "dev lead: plan written" in body
     assert "close_pr" in fx.names()
+
+
+def test_candidate_notification_says_how_to_answer_in_slack(env):
+    router, _, fx, _ = env
+    router.handle("issues", {"action": "opened", "issue": issue(["candidate", "source:idea"])})
+    assert "team chief 接受" in fx.calls[0][2]
+
+
+def test_slack_confirmation_is_recorded_with_its_permalink(env):
+    router, gh, fx, tmp_path = env
+    pr = open_package_pr(gh)
+    link = "https://onenod.slack.com/archives/C0DEMO/p1730000000999999"
+    body = f"/confirmed-via-slack by @carol at 2026-11-03T01:00:00Z link:{link}"
+    router.handle("issue_comment", {"issue": {"number": 10, "pull_request": {}, "labels": []},
+                                    "comment": {"user": {"login": "flow-demo-bot"}, "body": body, "html_url": "c"}})
+    meta = status_of(tmp_path)
+    assert meta["status"] == "in-progress"
+    assert meta["confirmation"]["via"] == "slack" and meta["confirmation"]["evidence"] == link
+
+
+def test_relayed_slack_answer_wakes_product_but_other_bot_comments_do_not(env):
+    router, _, fx, _ = env
+    labels = ["candidate", "clarifying"]
+    bot = {"login": "flow-demo-bot"}
+    router.handle("issue_comment", {"issue": issue(labels), "comment": {"user": bot, "body": "Questions: 1. ..."}})
+    assert wakes(fx) == []
+    router.handle("issue_comment", {"issue": issue(labels), "comment": {"user": bot, "body": "Answer from @alice (via Slack, https://x): under 1 s"}})
+    assert wakes(fx) == [("product", "candidate.human_reply")]
+
+
+def ready_to_merge(gh, tmp_path, risk="low", files=("app/export_report.py",)):
+    write_task(tmp_path, "awaiting-merge", risk=risk, checked_sha="abc1234")
+    pr = code_pr(gh)
+    gh.files[20] = list(files)
+    return pr
+
+
+def merge_comment(router, login="mike"):
+    body = f"/merge-via-slack by @{login} at 2026-11-03T02:00:00Z link:https://onenod.slack.com/archives/C0DEMO/p1"
+    router.handle("issue_comment", {"issue": {"number": 20, "pull_request": {}, "labels": []},
+                                    "comment": {"user": {"login": "flow-demo-bot"}, "body": body, "html_url": "c"}})
+
+
+def test_low_risk_pr_is_merged_from_slack_and_acceptance_starts(env):
+    router, gh, fx, tmp_path = env
+    ready_to_merge(gh, tmp_path)
+    merge_comment(router)
+    assert "merge_code_pr" in fx.names()
+    assert wakes(fx) == [("acceptance", "code_pr.merged")]
+    meta, body = taskfile.load(str(tmp_path), "T-001")
+    assert meta["status"] == "awaiting-acceptance" and "merged via Slack by @mike" in body
+
+
+@pytest.mark.parametrize("risk,files,login,reason", [
+    ("medium", ("app/export_report.py",), "mike", "medium risk"),
+    ("low", ("app/x.py", "flow/router.py"), "mike", "it changes flow/router.py"),
+    ("low", ("app/export_report.py",), "carol", "only the merger @mike"),
+])
+def test_slack_merge_is_refused_when_policy_says_github(env, risk, files, login, reason):
+    router, gh, fx, tmp_path = env
+    ready_to_merge(gh, tmp_path, risk, files)
+    merge_comment(router, login)
+    assert "merge_code_pr" not in fx.names()
+    assert any(c[0] == "slack_thread" and reason in c[2] for c in fx.calls)
+    assert status_of(tmp_path)["status"] == "awaiting-merge"
+    assert "slack-merge-refused" in (tmp_path / "records" / "problems.jsonl").read_text()
+
+
+def test_slack_merge_waits_for_checks_on_the_latest_commit(env):
+    router, gh, fx, tmp_path = env
+    pr = ready_to_merge(gh, tmp_path)
+    pr["head"]["sha"] = "newcommit"
+    merge_comment(router)
+    assert "merge_code_pr" not in fx.names()
+    assert any(c[0] == "comment" and "checks have not all passed" in c[2] for c in fx.calls)

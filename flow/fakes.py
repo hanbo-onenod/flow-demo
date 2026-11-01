@@ -48,3 +48,7 @@ class FakeEffects(RecordingEffects):
     def close_pr(self, number, text):
         super().close_pr(number, text)
         self.gh.prs[number]["state"] = "closed"
+
+    def merge_code_pr(self, number, message):
+        super().merge_code_pr(number, message)
+        self.gh.prs[number]["merged"] = True

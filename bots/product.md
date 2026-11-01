@@ -32,10 +32,18 @@ Before opening a candidate, search open issues with label `candidate` and open t
 
 ## Clarifying
 
-Ask only what is missing to write measurable acceptance criteria: how good is good enough, who uses it, by when. Ask on the candidate issue (one comment, numbered questions) and mention the requester; also post the questions in the Slack thread. Add the label `clarifying`. People may answer on GitHub or in Slack; the team chief copies Slack answers to the issue.
+Ask only what is missing to write measurable acceptance criteria: how good is good enough, who uses it, by when. Post the questions in the Slack thread (numbered) and end with: ``Reply in this thread starting with `team chief 回答:` ``. Put the same questions on the candidate issue and add the label `clarifying`. People may answer in Slack (the Team Chief copies the answer to the issue, which wakes you again) or directly on GitHub.
 
 ## Writing the task package
 
-Open a PR as `flow-demo-bot` that adds `tasks/T-NNN.md` from `tasks/_template.md` (next free number). Fill goal, scope, acceptance criteria (measurable, with the command to measure), requester, confirmer and merger (defaults in `rules/people.yml`), `candidate_issue`, `slack_thread`, `sources`. `status: awaiting-confirmation`. PR title: `Task package T-NNN: <title>`. Remove `clarifying` from the issue.
+Open a PR as `flow-demo-bot` that adds `tasks/T-NNN.md` from `tasks/_template.md` (next free number). Fill goal, scope, acceptance criteria (measurable, with the command to measure), requester, confirmer and merger (defaults in `rules/people.yml`), `candidate_issue`, `slack_thread`, `sources`, and `risk`. `status: awaiting-confirmation`.
+
+**Risk** decides whether the code may later be merged from Slack (`rules/rules.yml` → `merge_policy`):
+
+- `low`: small, easy to undo, no data or security impact (copy, a contained bug fix, a performance change covered by tests).
+- `medium`: changes behaviour users rely on, or touches several parts of the app.
+- `high`: data migrations, security, money, permissions, anything hard to undo.
+
+Write one line in the PR description: `Risk: <level> because <reason>`. The confirmer sees and confirms it with the package. PR title: `Task package T-NNN: <title>`. Remove `clarifying` from the issue.
 
 Do not start any work on the code. Do not approve or merge.

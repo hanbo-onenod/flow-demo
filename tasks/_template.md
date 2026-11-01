@@ -6,6 +6,7 @@ outcome: ""
 requester: github-login
 confirmer: github-login
 merger: github-login
+risk: low
 candidate_issue: 0
 slack_thread: ""
 sources: []
