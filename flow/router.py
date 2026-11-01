@@ -32,12 +32,13 @@ CHAT_CONFIRM = re.compile(r"^/confirmed-via-(card|slack) by @(\S+) at (\S+)(?:.*
 # The Team Chief relays a person's Slack answer to the issue with this prefix.
 RELAYED_ANSWER = re.compile(r"^Answer from @(\S+) \(via Slack")
 SLACK_MERGE = re.compile(r"^/merge-via-slack by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
+SLACK_RESUME = re.compile(r"^/resume-via-slack (T-\d{3,}) by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
 SEEN_LABEL = "flow:seen"  # set by the router once it has handled a new candidate
 SLACK_LINE = re.compile(r"^Slack thread:\s*(\S+)", re.MULTILINE)
 PASSING = {"success", "neutral", "skipped"}
 # Fields only the router writes. A bot PR based on an older version of the task
 # file must not overwrite them.
-ROUTER_FIELDS = ("failures", "confirmation", "checked_sha", "checked_runs", "reminded_status", "notified_status", "created", "updated")
+ROUTER_FIELDS = ("failures", "confirmation", "checked_sha", "checked_runs", "paused_from", "reminded_status", "notified_status", "created", "updated")
 
 
 def parse_time(value) -> datetime:
@@ -228,6 +229,11 @@ class Router:
             elif merge:
                 self.merge_via_slack(issue["number"], merge.group(1), merge.group(2), merge.group(3) or comment["html_url"])
             return
+        resume = SLACK_RESUME.search(comment.get("body") or "")
+        if resume and author in self.bot_logins:
+            task_id, login, at, link = resume.groups()
+            self.resume_task(task_id, login, at, link or comment["html_url"])
+            return
         labels = self.labels(issue)
         relayed = author in self.bot_logins and RELAYED_ANSWER.match(comment.get("body") or "")
         if {"candidate", "clarifying"} <= labels and (author not in self.bot_logins or relayed):
@@ -321,6 +327,8 @@ class Router:
         for field in ROUTER_FIELDS:
             if field in old_meta:
                 new_meta[field] = old_meta[field]
+        if new_meta.get("status") == "paused" and old_meta.get("status") != "paused":
+            new_meta["paused_from"] = old_meta.get("status")  # where `team chief 继续` returns to
         old_log = old_body.split("## Log", 1)[1].strip().splitlines() if "## Log" in old_body else []
         head_text, _, head_log = new_body.partition("## Log")
         extra = [line for line in head_log.strip().splitlines() if line.strip() and line not in old_log]
@@ -405,6 +413,26 @@ class Router:
             return
         if taskfile.load(self.repo_dir, task_id)[0].get("status") in ("in-progress", "awaiting-merge"):
             self.apply("code_pr.merged", task_id, pr=pr, note="All code merged, acceptance starts")
+
+    def resume_task(self, task_id: str, login: str, at: str, evidence: str) -> None:
+        """A person said `team chief 继续 T-NNN` in Slack: only the confirmer may resume."""
+        if not self.task_exists(task_id):
+            return
+        meta, _ = taskfile.load(self.repo_dir, task_id)
+        thread = meta.get("slack_thread", "")
+        confirmer = self.role_login("confirmer", meta)
+        if meta.get("status") != "paused":
+            self.fx.slack_thread(thread, f"[Flow] {task_id} is not paused (status {meta.get('status')}); nothing to resume.")
+            return
+        if login != confirmer:
+            self.fx.slack_thread(thread, f"[Flow] {task_id}: only the confirmer @{confirmer} can resume it, not @{login}.")
+            self.record_problem("wrong-confirmer", task_id, f"{login} tried to resume", evidence)
+            self.fx.commit(f"records: wrong-confirmer {task_id}")
+            return
+        back = meta.get("paused_from") or "in-progress"
+        self.set_status(task_id, back, f"resumed via Slack by @{login} at {at}, evidence {evidence}", notified_status="", paused_from="")
+        self.fx.wake("dev_lead", self.wake_payload("dev_lead", "status.resumed", task_id, thread=thread,
+                                                 note=f"Resumed by @{login}; continue within the confirmed scope"))
 
     def merge_risk(self, meta: dict, files: list[str]) -> tuple[str, str]:
         policy = self.rules.get("merge_policy", {})
