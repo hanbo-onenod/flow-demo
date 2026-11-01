@@ -55,12 +55,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_BOARD_CHANNEL: ${{ vars.SLACK_BOARD_CHANNEL }}
-          GROK_WEBHOOK_TOKEN: ${{ secrets.GROK_WEBHOOK_TOKEN }}
           GROK_WEBHOOK_PRODUCT: ${{ secrets.GROK_WEBHOOK_PRODUCT }}
+          GROK_WEBHOOK_KEY_PRODUCT: ${{ secrets.GROK_WEBHOOK_KEY_PRODUCT }}
           GROK_WEBHOOK_DEV_LEAD: ${{ secrets.GROK_WEBHOOK_DEV_LEAD }}
+          GROK_WEBHOOK_KEY_DEV_LEAD: ${{ secrets.GROK_WEBHOOK_KEY_DEV_LEAD }}
           GROK_WEBHOOK_ACCEPTANCE: ${{ secrets.GROK_WEBHOOK_ACCEPTANCE }}
+          GROK_WEBHOOK_KEY_ACCEPTANCE: ${{ secrets.GROK_WEBHOOK_KEY_ACCEPTANCE }}
           GROK_WEBHOOK_OUTER_LOOP: ${{ secrets.GROK_WEBHOOK_OUTER_LOOP }}
+          GROK_WEBHOOK_KEY_OUTER_LOOP: ${{ secrets.GROK_WEBHOOK_KEY_OUTER_LOOP }}
           GROK_WEBHOOK_PROCESS_IMPROVEMENT: ${{ secrets.GROK_WEBHOOK_PROCESS_IMPROVEMENT }}
+          GROK_WEBHOOK_KEY_PROCESS_IMPROVEMENT: ${{ secrets.GROK_WEBHOOK_KEY_PROCESS_IMPROVEMENT }}
         run: |
           git config user.name "flow-router"
           git config user.email "flow-router@users.noreply.github.com"

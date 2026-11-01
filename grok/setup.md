@@ -46,4 +46,4 @@ You were woken by the flow router. The webhook body is JSON with fields bot, eve
 4. If the event is not in your rulebook, post "[<your name>] got unexpected event <event>, doing nothing" in #demo-看板 and stop.
 ```
 
-After saving each routine, copy its **webhook URL** (and token, if Grok shows one). They go into GitHub secrets — see the setup guide.
+After saving each routine, open it on desktop: the **Webhook** section shows **POST to** (the URL) and **key**. Both go into GitHub secrets (`GROK_WEBHOOK_<BOT>` and `GROK_WEBHOOK_KEY_<BOT>`) — see the setup guide.
