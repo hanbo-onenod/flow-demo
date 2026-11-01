@@ -47,3 +47,4 @@ python -m flow.router --event issues --payload some-event.json --dry-run
 - Secrets: `FLOW_DEPLOY_KEY` (deploy key with write access), `SLACK_BOT_TOKEN`, `GROK_WEBHOOK_PRODUCT`, `GROK_WEBHOOK_DEV_LEAD`, `GROK_WEBHOOK_ACCEPTANCE`, `GROK_WEBHOOK_OUTER_LOOP`, `GROK_WEBHOOK_PROCESS_IMPROVEMENT`, and for each of those a `GROK_WEBHOOK_KEY_<BOT>` with the routine's webhook key (sent as `Authorization: Bearer <key>`). A missing secret makes the router skip that channel and log it.
 - Variables: `SLACK_BOARD_CHANNEL` (channel ID), optional `FLOW_DEMO_FLAKY_RATE`.
 - Ruleset on `main`: require a pull request with 1 approval and the `test` check; bypass list: the deploy key (always) and repository admins (pull requests only).
+Setup check 5.
