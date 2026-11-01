@@ -12,10 +12,13 @@ class FakeGH:
         self.heads: dict[tuple[str, str], str] = {}
         self.checks: dict[str, list] = {}
 
-    def add_pr(self, number, author, files, body="", heads=None, sha=None):
+    def add_pr(self, number, author, files, body="", heads=None, sha=None, bases=None):
         sha = sha or f"sha{number}"
+        for path, text in (bases or {}).items():
+            self.heads[(f"base{number}", path)] = text
         pr = {"number": number, "user": {"login": author}, "head": {"sha": sha}, "body": body, "labels": [],
-              "html_url": f"https://github.com/{self.repo}/pull/{number}", "title": f"PR {number}", "merged": False}
+              "html_url": f"https://github.com/{self.repo}/pull/{number}", "title": f"PR {number}", "merged": False,
+              "base": {"sha": f"base{number}"}}
         self.prs[number] = pr
         self.files[number] = files
         for path, text in (heads or {}).items():
@@ -27,6 +30,9 @@ class FakeGH:
 
     def pr_files(self, number):
         return self.files[number]
+
+    def merge_base(self, base_sha, head_sha):
+        return base_sha
 
     def issue(self, number):
         return next((i for i in getattr(self, "issues", []) if i["number"] == number), None)

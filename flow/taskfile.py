@@ -49,6 +49,23 @@ def save(repo_dir: str, task_id: str, meta: dict, body: str) -> None:
         f.write(dump(meta, body))
 
 
+def sections(body: str) -> list[tuple[str, str]]:
+    """Split a body into (heading line, text including the heading) pairs.
+    Text before the first `## ` heading comes back under the heading ""."""
+    parts: list[tuple[str, str]] = []
+    heading, lines = "", []
+    for line in body.splitlines(keepends=True):
+        if line.startswith("## "):
+            if heading or "".join(lines).strip():
+                parts.append((heading, "".join(lines)))
+            heading, lines = line.strip(), [line]
+        else:
+            lines.append(line)
+    if heading or "".join(lines).strip():
+        parts.append((heading, "".join(lines)))
+    return parts
+
+
 def append_log(body: str, line: str) -> str:
     entry = f"- {now_iso()} {line}"
     if "## Log" not in body:

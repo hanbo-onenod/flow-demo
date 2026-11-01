@@ -250,6 +250,7 @@ class Router:
         if not files or not all(f.startswith(allowed) for f in files):
             return "code", {}
         pr = self.gh.pr(number)
+        base_sha = self.gh.merge_base(pr["base"]["sha"], pr["head"]["sha"]) if pr.get("base") else None
         kinds = {}
         for path in files:
             if not taskfile.is_task_path(path):
@@ -258,7 +259,10 @@ class Router:
             head = self.gh.file_at(pr["head"]["sha"], path)
             new = taskfile.parse(head)[0].get("status") if head else None
             old = taskfile.load(self.repo_dir, task_id)[0].get("status") if self.task_exists(task_id) else None
-            if old is None and new == "awaiting-confirmation":
+            base = self.gh.file_at(base_sha, path) if base_sha and old is not None else None
+            if base is not None and taskfile.parse(base)[0].get("status") == new:
+                kinds[task_id] = "auto"  # the PR did not touch the status; main's status is kept
+            elif old is None and new == "awaiting-confirmation":
                 kinds[task_id] = "approval"
             elif new == "acceptance-proposed" and old != new:
                 kinds[task_id] = "approval"
@@ -295,12 +299,13 @@ class Router:
         """Bring a bot's tasks/ or records/ PR into main and close it.
 
         Not a git merge: the bot's branch is usually based on an older main, so
-        its copy of router fields and Log is stale. Content sections and the
-        status the bot proposed come from the PR; router fields come from main;
-        Log lines from both are kept.
+        its copy of the file is stale. Only what the PR changed relative to the
+        commit it branched from is taken; everything else stays as on main.
+        Router fields always come from main; Log lines from both are kept.
         """
         pr = self.gh.pr(number)
         sha = pr["head"]["sha"]
+        base_sha = self.gh.merge_base(pr["base"]["sha"], sha) if pr.get("base") else None
         task_ids = []
         for path in self.gh.pr_files(number):
             head = self.gh.file_at(sha, path)
@@ -310,7 +315,8 @@ class Router:
             if taskfile.is_task_path(path):
                 task_id = taskfile.task_id_from_path(path)
                 task_ids.append(task_id)
-                head = self.merge_task_text(task_id, head)
+                base = self.gh.file_at(base_sha, path) if base_sha else None
+                head = self.merge_task_text(task_id, head, base)
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with open(target, "w", encoding="utf-8") as f:
                 f.write(head)
@@ -318,23 +324,42 @@ class Router:
         self.fx.close_pr(number, f"[Flow] Applied to main by the flow router; closing. Tasks: {', '.join(task_ids) or 'none'}.")
         return task_ids
 
-    def merge_task_text(self, task_id: str, head: str) -> str:
+    def merge_task_text(self, task_id: str, head: str, base: str | None = None) -> str:
         new_meta, new_body = taskfile.parse(head)
         if not self.task_exists(task_id):
             new_meta.setdefault("created", taskfile.now_iso())
             new_meta["updated"] = taskfile.now_iso()
             return taskfile.dump(new_meta, new_body)
         old_meta, old_body = taskfile.load(self.repo_dir, task_id)
+        base_meta, base_body = taskfile.parse(base) if base else (None, None)
+
+        # Front matter: a field the PR changed comes from the PR, any other
+        # field stays as on main. Without a base, every PR field wins.
+        meta = dict(old_meta)
+        for key, value in new_meta.items():
+            if base_meta is None or base_meta.get(key) != value:
+                meta[key] = value
         for field in ROUTER_FIELDS:
             if field in old_meta:
-                new_meta[field] = old_meta[field]
-        if new_meta.get("status") == "paused" and old_meta.get("status") != "paused":
-            new_meta["paused_from"] = old_meta.get("status")  # where `team chief 继续` returns to
-        old_log = old_body.split("## Log", 1)[1].strip().splitlines() if "## Log" in old_body else []
-        head_text, _, head_log = new_body.partition("## Log")
-        extra = [line for line in head_log.strip().splitlines() if line.strip() and line not in old_log]
+                meta[field] = old_meta[field]
+        if meta.get("status") == "paused" and old_meta.get("status") != "paused":
+            meta["paused_from"] = old_meta.get("status")  # where `team chief 继续` returns to
+
+        # Sections: same rule, section by section; the Log keeps lines from both.
+        old_sections, new_sections = taskfile.sections(old_body), taskfile.sections(new_body)
+        base_sections = taskfile.sections(base_body) if base_body is not None else None
+        merged = []
+        for heading, text in new_sections:
+            if heading == "## Log":
+                continue
+            changed = base_sections is None or dict(base_sections).get(heading) != text
+            merged.append((heading, text if changed or heading not in dict(old_sections) else dict(old_sections)[heading]))
+        merged += [(h, t) for h, t in old_sections if h != "## Log" and h not in dict(new_sections)]
+        old_log = dict(old_sections).get("## Log", "").strip().splitlines()
+        extra = [line for line in dict(new_sections).get("## Log", "").strip().splitlines() if line.strip() and line not in old_log]
         log = "\n".join(old_log + extra)
-        return taskfile.dump(new_meta, f"{head_text.rstrip()}\n\n## Log\n\n{log}\n" if log else f"{head_text.rstrip()}\n\n## Log\n\n")
+        body = "".join(text for _, text in merged).rstrip() + "\n\n## Log\n\n" + (log + "\n" if log else "")
+        return taskfile.dump(meta, body)
 
     def notify_pending(self, task_id: str, pr: dict) -> None:
         head = self.gh.file_at(pr["head"]["sha"], f"tasks/{task_id}.md")
