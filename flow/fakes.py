@@ -28,6 +28,9 @@ class FakeGH:
     def pr_files(self, number):
         return self.files[number]
 
+    def open_issues(self, label):
+        return [i for i in getattr(self, "issues", []) if label in {l["name"] for l in i["labels"]}]
+
     def open_prs(self):
         return [p for p in self.prs.values() if not p["merged"] and p.get("state") != "closed"]
 

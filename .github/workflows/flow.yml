@@ -24,7 +24,7 @@ on:
       job:
         description: What to run now
         type: choice
-        options: [sweep, outer_loop, process_improvement]
+        options: [sweep, threads, outer_loop, process_improvement]
         default: sweep
 
 # No concurrency group on purpose: GitHub keeps only one pending run per
@@ -57,6 +57,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_BOARD_CHANNEL: ${{ vars.SLACK_BOARD_CHANNEL }}
+          SLACK_REQUESTS_CHANNEL: ${{ vars.SLACK_REQUESTS_CHANNEL }}
           GROK_WEBHOOK_PRODUCT: ${{ secrets.GROK_WEBHOOK_PRODUCT }}
           GROK_WEBHOOK_KEY_PRODUCT: ${{ secrets.GROK_WEBHOOK_KEY_PRODUCT }}
           GROK_WEBHOOK_DEV_LEAD: ${{ secrets.GROK_WEBHOOK_DEV_LEAD }}

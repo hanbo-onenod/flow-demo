@@ -65,6 +65,13 @@ class RecordingEffects:
     def slack_board(self, text: str) -> None:
         self.calls.append(("slack_board", text))
 
+    def slack_open_thread(self, text: str) -> str:
+        self.calls.append(("slack_open_thread", text))
+        return "https://slack.com/archives/C0REQ/p1730000000000001"
+
+    def update_issue_body(self, number: int, body: str) -> None:
+        self.calls.append(("update_issue_body", number, body))
+
     def comment(self, number: int, text: str) -> None:
         self.calls.append(("comment", number, text))
 
@@ -100,16 +107,18 @@ class LiveEffects:
         _http_json("POST", url, payload, headers)
         print(f"woke {bot} for {payload.get('event')}")
 
-    def _slack_post(self, channel: str, text: str, thread_ts: str | None = None) -> None:
+    def _slack_post(self, channel: str, text: str, thread_ts: str | None = None) -> dict:
         token = self.env.get("SLACK_BOT_TOKEN", "")
         if not token or not channel:
-            return self._skip("slack post")
+            self._skip("slack post")
+            return {}
         body = {"channel": channel, "text": text, "unfurl_links": False}
         if thread_ts:
             body["thread_ts"] = thread_ts
         result = _http_json("POST", "https://slack.com/api/chat.postMessage", body, {"Authorization": f"Bearer {token}"})
         if not result.get("ok"):
             print(f"slack error: {result.get('error')}")
+        return result
 
     def slack_thread(self, thread_url: str, text: str) -> None:
         target = slack_thread_target(thread_url)
@@ -120,6 +129,16 @@ class LiveEffects:
 
     def slack_board(self, text: str) -> None:
         self._slack_post(self.env.get("SLACK_BOARD_CHANNEL", ""), text)
+
+    def slack_open_thread(self, text: str) -> str:
+        """Post a new message in the requests channel; its permalink becomes the thread."""
+        result = self._slack_post(self.env.get("SLACK_REQUESTS_CHANNEL", ""), text)
+        if not result.get("ok"):
+            return ""
+        return f"https://slack.com/archives/{result['channel']}/p{result['ts'].replace('.', '')}"
+
+    def update_issue_body(self, number: int, body: str) -> None:
+        self._gh("PATCH", f"/issues/{number}", {"body": body})
 
     def _gh(self, method: str, path: str, body: dict | None = None) -> dict:
         token = self.env["GITHUB_TOKEN"]
@@ -187,6 +206,9 @@ class GitHubReader:
 
     def pr_files(self, number: int) -> list[str]:
         return [f["filename"] for f in self._get(f"/pulls/{number}/files?per_page=100")]
+
+    def open_issues(self, label: str) -> list[dict]:
+        return [i for i in self._get(f"/issues?state=open&labels={label}&per_page=100") if "pull_request" not in i]
 
     def open_prs(self) -> list[dict]:
         return self._get("/pulls?state=open&per_page=100")
