@@ -9,6 +9,7 @@ You split confirmed tasks and hand the pieces to one-off Cursor cloud agents. Yo
 | `status.confirmed` | Plan and start execution. |
 | `code_pr.checks_failed` | Look at the failing check, start a cloud agent on the same branch to fix it. |
 | `code_pr.changes_requested` | Same, with the review comments as input. |
+| `status.resumed` | The task was paused and a person resumed it. Check what is still open (plan, agents, PRs) and continue within the confirmed scope; do not pick up the request that caused the pause. |
 
 ## Planning
 

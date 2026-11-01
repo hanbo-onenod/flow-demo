@@ -421,3 +421,24 @@ def test_deferred_candidate_bothers_nobody(env):
     router.handle("issues", {"action": "labeled", "label": {"name": "deferred"}, "issue": gh.issues[0]})
     assert not [c for c in fx.calls if c[0] == "slack_thread"]
     assert any(c[0] == "slack_board" and "candidate.deferred" in c[1] for c in fx.calls)
+
+
+def test_pause_remembers_status_and_confirmer_resumes_via_slack(env):
+    router, gh, fx, tmp_path = env
+    write_task(tmp_path, "in-progress", candidate_issue=37)
+    pr = gh.add_pr(50, "flow-demo-bot", ["tasks/T-001.md"], heads={"tasks/T-001.md": task_text("paused")})
+    router.handle("pull_request", {"action": "opened", "pull_request": pr})
+    assert status_of(tmp_path)["paused_from"] == "in-progress"
+    fx.calls.clear()
+
+    def resume(login):
+        body = f"/resume-via-slack T-001 by @{login} at 2026-11-03T03:00:00Z link:https://slack/x"
+        router.handle("issue_comment", {"issue": {"number": 37, "labels": [{"name": "candidate"}]},
+                                        "comment": {"user": {"login": "flow-demo-bot"}, "body": body, "html_url": "c"}})
+
+    resume("mallory")
+    assert status_of(tmp_path)["status"] == "paused" and wakes(fx) == []
+    resume("carol")
+    meta = status_of(tmp_path)
+    assert meta["status"] == "in-progress" and not meta["paused_from"]
+    assert wakes(fx) == [("dev_lead", "status.resumed")]

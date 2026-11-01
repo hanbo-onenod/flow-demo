@@ -61,6 +61,7 @@ People answer the flow's questions in the task's Slack thread. You turn each ans
 | `team chief 不要 T-NNN: <reason>` | Comment `/rejected-via-slack by @<login> at <time> link:<permalink>: <reason>` on that PR |
 | `team chief 合并 #N` | On code PR #N, comment exactly `/merge-via-slack by @<login> at <ISO time> link:<permalink>`. The router decides whether the risk allows it and replies in the thread |
 | `team chief 暂停 T-NNN` / `team chief 取消 T-NNN` | Raise an exception (above) |
+| `team chief 继续 T-NNN` (on a paused task, optionally with a decision such as "scope stays as confirmed") | On the task's candidate issue, comment exactly `/resume-via-slack T-NNN by @<login> at <ISO time> link:<permalink>`. If the person also asked for extra work, open a separate candidate for it instead of adding it to T-NNN |
 
 The router checks that the person is the task's confirmer or merger, that checks have passed, and the risk level. You never merge, approve, or decide for them. If a keyword is ambiguous (no task number and more than one task is open in the thread), ask which one.
 
