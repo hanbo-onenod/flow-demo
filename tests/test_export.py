@@ -44,7 +44,7 @@ def test_amount_is_formatted_in_currency_units(small_db, tmp_path):
 def test_order_numbers_are_unique():
     # Planted flaky test: make_order_numbers can produce duplicates.
     # FLOW_DEMO_FLAKY_RATE=1 forces a failure (used for the circuit-breaker drill).
-    forced = float(os.environ.get("FLOW_DEMO_FLAKY_RATE", "0"))
+    forced = float(os.environ.get("FLOW_DEMO_FLAKY_RATE") or 0)
     if forced and random.random() < forced:
         pytest.fail("forced failure for the circuit-breaker drill (FLOW_DEMO_FLAKY_RATE)")
     numbers = db.make_order_numbers(300, random.Random())
