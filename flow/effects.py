@@ -72,6 +72,9 @@ class RecordingEffects:
     def update_issue_body(self, number: int, body: str) -> None:
         self.calls.append(("update_issue_body", number, body))
 
+    def add_label(self, number: int, label: str) -> None:
+        self.calls.append(("add_label", number, label))
+
     def comment(self, number: int, text: str) -> None:
         self.calls.append(("comment", number, text))
 
@@ -140,6 +143,10 @@ class LiveEffects:
     def update_issue_body(self, number: int, body: str) -> None:
         self._gh("PATCH", f"/issues/{number}", {"body": body})
 
+    def add_label(self, number: int, label: str) -> None:
+        # Added with the workflow token, so it does not trigger another run.
+        self._gh("POST", f"/issues/{number}/labels", {"labels": [label]})
+
     def _gh(self, method: str, path: str, body: dict | None = None) -> dict:
         token = self.env["GITHUB_TOKEN"]
         return _http_json(
@@ -206,6 +213,12 @@ class GitHubReader:
 
     def pr_files(self, number: int) -> list[str]:
         return [f["filename"] for f in self._get(f"/pulls/{number}/files?per_page=100")]
+
+    def issue(self, number: int) -> dict | None:
+        try:
+            return self._get(f"/issues/{number}")
+        except RuntimeError:
+            return None
 
     def open_issues(self, label: str) -> list[dict]:
         return [i for i in self._get(f"/issues?state=open&labels={label}&per_page=100") if "pull_request" not in i]

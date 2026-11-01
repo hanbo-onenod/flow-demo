@@ -27,9 +27,11 @@ on:
         options: [sweep, threads, outer_loop, process_improvement]
         default: sweep
 
-# No concurrency group on purpose: GitHub keeps only one pending run per
-# group and cancels the rest, which would drop events (an issue created with
-# two labels fires three at once). Runs that race on main rebase and retry.
+# Runs go in parallel: a shared concurrency group would keep only one pending
+# run and cancel the rest, dropping events. The one exception is a burst of
+# `issues` events for the same issue (created with several labels): those are
+# grouped per issue, and the run that survives reads the issue's current labels.
+# Runs that race on main rebase and retry.
 
 permissions:
   contents: read
@@ -40,6 +42,9 @@ permissions:
 jobs:
   route:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.event_name == 'issues' && format('flow-issue-{0}', github.event.issue.number) || format('flow-run-{0}', github.run_id) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:

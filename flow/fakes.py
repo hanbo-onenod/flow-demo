@@ -28,6 +28,9 @@ class FakeGH:
     def pr_files(self, number):
         return self.files[number]
 
+    def issue(self, number):
+        return next((i for i in getattr(self, "issues", []) if i["number"] == number), None)
+
     def open_issues(self, label):
         return [i for i in getattr(self, "issues", []) if label in {l["name"] for l in i["labels"]}]
 
@@ -55,3 +58,9 @@ class FakeEffects(RecordingEffects):
     def merge_code_pr(self, number, message):
         super().merge_code_pr(number, message)
         self.gh.prs[number]["merged"] = True
+
+    def add_label(self, number, label):
+        super().add_label(number, label)
+        found = self.gh.issue(number)
+        if found is not None:
+            found["labels"].append({"name": label})

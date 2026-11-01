@@ -77,7 +77,8 @@ def test_minutes_wake_product_and_ideas_notify_owner(env):
     fx.calls.clear()
     router.handle("issues", {"action": "opened", "issue": issue(["candidate", "source:idea"])})
     assert wakes(fx) == []
-    assert fx.calls[0][0] == "slack_thread" and fx.calls[0][1] == THREAD
+    notice = next(c for c in fx.calls if c[0] == "slack_thread")
+    assert notice[1] == THREAD
 
 
 def test_accepting_a_candidate_wakes_product(env):
@@ -278,7 +279,7 @@ def test_bot_pr_from_stale_branch_keeps_router_fields_and_log(env):
 def test_candidate_notification_says_how_to_answer_in_slack(env):
     router, _, fx, _ = env
     router.handle("issues", {"action": "opened", "issue": issue(["candidate", "source:idea"])})
-    assert "team chief 接受" in fx.calls[0][2]
+    assert "team chief 接受" in next(c for c in fx.calls if c[0] == "slack_thread")[2]
 
 
 def test_slack_confirmation_is_recorded_with_its_permalink(env):
@@ -400,3 +401,23 @@ def test_threads_job_backfills_existing_candidates(env):
                  issue(["candidate", "source:idea"], number=7)]
     router.handle("workflow_dispatch", {"inputs": {"job": "threads"}})
     assert [c[1] for c in fx.calls if c[0] == "update_issue_body"] == [21]
+
+
+def test_candidate_labelled_after_creation_is_handled_once(env):
+    router, gh, fx, _ = env
+    bare = issue([], number=30)
+    gh.issues = [issue(["candidate", "source:idea"], number=30)]  # labels added after creation
+    router.handle("issues", {"action": "opened", "issue": bare})
+    router.handle("issues", {"action": "labeled", "label": {"name": "candidate"}, "issue": bare})
+    router.handle("issues", {"action": "labeled", "label": {"name": "source:idea"}, "issue": bare})
+    notices = [c for c in fx.calls if c[0] == "slack_thread" and "#30" in c[2]]
+    assert len(notices) == 1
+    assert ("add_label", 30, "flow:seen") in fx.calls
+
+
+def test_deferred_candidate_bothers_nobody(env):
+    router, gh, fx, _ = env
+    gh.issues = [issue(["candidate", "deferred", "source:minutes-split"], number=31)]
+    router.handle("issues", {"action": "labeled", "label": {"name": "deferred"}, "issue": gh.issues[0]})
+    assert not [c for c in fx.calls if c[0] == "slack_thread"]
+    assert any(c[0] == "slack_board" and "candidate.deferred" in c[1] for c in fx.calls)
