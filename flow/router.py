@@ -170,7 +170,24 @@ class Router:
     @staticmethod
     def issue_thread(issue: dict) -> str:
         match = SLACK_LINE.search(issue.get("body") or "")
-        return match.group(1) if match else ""
+        return match.group(1) if match and match.group(1).startswith("http") else ""
+
+    def ensure_thread(self, issue: dict) -> bool:
+        """Give a candidate without a Slack thread (for example one from user
+        feedback) a thread in the requests channel, so people can decide there.
+        Returns True when a new thread was opened."""
+        if self.issue_thread(issue):
+            return False
+        link = self.fx.slack_open_thread(f"[Flow] Candidate #{issue['number']}: {issue['title']} {issue['html_url']}")
+        if not link:
+            return False
+        body = issue.get("body") or ""
+        line = f"Slack thread: {link}"
+        whole_line = re.compile(r"^Slack thread:.*$", re.MULTILINE)
+        body = whole_line.sub(line, body, count=1) if whole_line.search(body) else body.rstrip() + f"\n{line}\n"
+        self.fx.update_issue_body(issue["number"], body)
+        issue["body"] = body
+        return True
 
     def on_issues(self, payload: dict) -> None:
         issue, action = payload["issue"], payload["action"]
@@ -181,6 +198,7 @@ class Router:
             if labels & {"source:minutes", "source:doc"}:
                 self.apply("intake.opened", issue=issue, note="New minutes or document to split")
             else:
+                self.ensure_thread(issue)
                 self.apply("candidate.opened", issue=issue, note="New candidate, please accept, merge, defer or reject")
         elif action == "labeled" and payload.get("label", {}).get("name") == "accepted":
             self.apply("candidate.accepted", issue=issue, note="Requirement owner accepted this candidate")
@@ -485,6 +503,10 @@ class Router:
         job = (payload.get("inputs") or {}).get("job", "sweep")
         if job == "sweep":
             self.sweep()
+        elif job == "threads":
+            for issue in self.gh.open_issues("candidate"):
+                if self.ensure_thread(issue):
+                    self.apply("candidate.opened", issue=issue, note="Candidate needs a decision")
         elif job in self.rules.get("schedules", {}):
             bot = self.rules["schedules"][job]["wake"]
             self.fx.wake(bot, self.wake_payload(bot, f"schedule.{job}", note=f"Manual {job}"))

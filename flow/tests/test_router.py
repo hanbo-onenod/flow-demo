@@ -373,3 +373,30 @@ def test_rerun_on_the_same_commit_is_evaluated(env):
     router.handle("workflow_run", run)
     meta = status_of(tmp_path)
     assert meta["failures"] == 1 and meta["status"] == "awaiting-merge"
+
+
+FEEDBACK_BODY = "Wanted: readable CSV\nSlack thread: none (from feedback, no Slack thread)\n\nreports: 5\n"
+
+
+def test_candidate_without_thread_gets_one_in_the_requests_channel(env):
+    router, _, fx, _ = env
+    cand = issue(["candidate", "source:feedback"], number=21, body=FEEDBACK_BODY)
+    router.handle("issues", {"action": "opened", "issue": cand})
+    new_link = "https://slack.com/archives/C0REQ/p1730000000000001"
+    update = next(c for c in fx.calls if c[0] == "update_issue_body")
+    assert f"Slack thread: {new_link}\n" in update[2] and "none" not in update[2] and "reports: 5" in update[2]
+    assert any(c[0] == "slack_thread" and c[1] == new_link and "team chief 接受" in c[2] for c in fx.calls)
+
+
+def test_candidate_with_a_thread_keeps_it(env):
+    router, _, fx, _ = env
+    router.handle("issues", {"action": "opened", "issue": issue(["candidate", "source:idea"])})
+    assert "slack_open_thread" not in fx.names()
+
+
+def test_threads_job_backfills_existing_candidates(env):
+    router, gh, fx, _ = env
+    gh.issues = [issue(["candidate", "source:feedback"], number=21, body=FEEDBACK_BODY),
+                 issue(["candidate", "source:idea"], number=7)]
+    router.handle("workflow_dispatch", {"inputs": {"job": "threads"}})
+    assert [c[1] for c in fx.calls if c[0] == "update_issue_body"] == [21]
