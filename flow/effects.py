@@ -74,6 +74,9 @@ class RecordingEffects:
     def commit(self, message: str) -> None:
         self.calls.append(("commit", message))
 
+    def merge_code_pr(self, number: int, message: str) -> None:
+        self.calls.append(("merge_code_pr", number, message))
+
     def names(self) -> list[str]:
         return [c[0] for c in self.calls]
 
@@ -143,6 +146,12 @@ class LiveEffects:
                 if attempt == 3:
                     raise
                 self._git("pull", "--rebase", "origin", "main")
+
+    def merge_code_pr(self, number: int, message: str) -> None:
+        # Only reached when the merge policy allows a merge from Slack.
+        self._git("fetch", "origin", f"pull/{number}/head")
+        self._git("merge", "--no-ff", "FETCH_HEAD", "-m", message)
+        self._push()
 
     def close_pr(self, number: int, text: str) -> None:
         self.comment(number, text)

@@ -27,7 +27,7 @@ Unclear: <what is still missing, or "nothing">
 Slack thread: <permalink of the thread you are replying in>
 ```
 
-If the person who asked is the requirement owner (see `rules/people.yml`) and the request is already clear, also add the label `accepted`; otherwise leave the decision to the requirement owner.
+Do not add `accepted` yourself: the requirement owner decides, by replying `team chief 接受` in the thread (see below) or labelling the issue on GitHub.
 
 ## Exceptions
 
@@ -44,6 +44,25 @@ When the confirmer of a task asks you "what is waiting for me" and a task packag
 4. Cards raised by a routine expire after 30 minutes. If that happens, add a Log line `PROBLEM: card expired` in the task PR and remind the confirmer next time they talk to you.
 
 Never post a `/confirmed-via-card` comment without an approved card from that exact person.
+
+## Decisions people make in Slack
+
+People answer the flow's questions in the task's Slack thread. You turn each answer into exactly one GitHub action, then reply in the thread with what you did and the link.
+
+**Who said it.** Only messages written by a person count. On this plan every bot also posts under the account owner's name, so **ignore any message that starts with `[`** (that is a bot speaking), even if it contains a keyword. Map the person's Slack ID to their GitHub login with `rules/people.yml`; if they are not listed, say so and do nothing.
+
+| They write (in the task's thread) | You do (as `flow-demo-bot`) |
+| --- | --- |
+| `team chief 接受` (on a candidate) | Add the label `accepted` to the candidate issue |
+| `team chief 回答: <answer>` (to a Product Bot question) | Comment on the candidate issue: `Answer from @<login> (via Slack, <permalink>): <answer>` — this wakes the Product Bot |
+| `team chief 暂缓` / `team chief 不要: <reason>` (on a candidate) | Add `deferred`, or close the issue with label `out-of-scope` and the reason |
+| `team chief 确认 T-NNN` | On the open task-package PR for T-NNN, comment exactly `/confirmed-via-slack by @<login> at <ISO time> link:<permalink of their message>` |
+| `team chief 验收 T-NNN` | Same comment, on the open acceptance PR for T-NNN |
+| `team chief 不要 T-NNN: <reason>` | Comment `/rejected-via-slack by @<login> at <time> link:<permalink>: <reason>` on that PR |
+| `team chief 合并 #N` | On code PR #N, comment exactly `/merge-via-slack by @<login> at <ISO time> link:<permalink>`. The router decides whether the risk allows it and replies in the thread |
+| `team chief 暂停 T-NNN` / `team chief 取消 T-NNN` | Raise an exception (above) |
+
+The router checks that the person is the task's confirmer or merger, that checks have passed, and the risk level. You never merge, approve, or decide for them. If a keyword is ambiguous (no task number and more than one task is open in the thread), ask which one.
 
 ## Style
 

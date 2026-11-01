@@ -22,12 +22,14 @@ statuses:
 # what is a safety rule, so it is not configurable here); edit the others freely.
 # "notify" posts in the task's Slack thread and mentions that role.
 # "board" posts one line to the board channel.
+# "hint" is appended to the notification: how to answer in Slack.
 events:
   intake.opened:             # minutes or a document arrived (label source:minutes / source:doc)
     wake: product
     board: true
   candidate.opened:          # any other issue labelled "candidate" was opened
     notify: requirement_owner
+    hint: "Reply here `team chief 接受`, `team chief 暂缓` or `team chief 不要: reason`."
     board: true
   candidate.accepted:        # requirement owner added the "accepted" label
     wake: product
@@ -48,6 +50,7 @@ events:
   code_pr.checks_passed:
     set_status: awaiting-merge
     notify: merger
+    hint: "Reply here `team chief 合并 #{number}` (low-risk changes only), or merge on GitHub."
     board: true
   code_pr.checks_failed:
     wake: dev_lead            # until the failure limit below is reached
@@ -82,6 +85,17 @@ timeouts_hours:               # remind the role on the right if a task sits in a
 schedules:
   outer_loop:          { every: day,  hour_utc: 1, wake: outer_loop }           # 09:00 Beijing / Singapore
   process_improvement: { every: week, weekday: monday, hour_utc: 2, wake: process_improvement }
+
+# Merging code: people merge on GitHub, or say `team chief 合并 #N` in the
+# task's Slack thread and the router merges for them, if the risk allows.
+merge_policy:
+  slack_merge_allowed_risk: [low]   # risk levels that may be merged from Slack
+  default_risk: medium              # when the task package sets no risk
+  github_only_paths:                # a PR touching these is always high risk
+    - rules/
+    - bots/
+    - flow/
+    - .github/
 
 # Only these paths may be merged by the router itself. Everything else is merged by people.
 router_may_merge_paths:

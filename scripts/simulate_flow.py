@@ -44,6 +44,10 @@ class PrintingEffects(FakeEffects):
         super().comment(number, text)
         print(f"   -> comment on #{number}: {text}")
 
+    def merge_code_pr(self, number, message):
+        super().merge_code_pr(number, message)
+        print(f"   -> router merged code PR #{number} on Mike's behalf")
+
     def close_pr(self, number, text):
         super().close_pr(number, text)
         print(f"   -> router applied PR #{number} to main and closed it")
@@ -52,7 +56,7 @@ class PrintingEffects(FakeEffects):
 def task(status: str, **extra) -> str:
     meta = {
         "id": "T-001", "title": "Make the report export faster", "status": status, "outcome": "",
-        "requester": "alice", "confirmer": "carol", "merger": "mike", "candidate_issue": 1,
+        "requester": "alice", "confirmer": "carol", "merger": "mike", "risk": "low", "candidate_issue": 1,
         "slack_thread": THREAD, "sources": [THREAD], "failures": 0,
         "updated": taskfile.now_iso(), "reminded_status": "", "confirmation": {},
     }
@@ -100,9 +104,11 @@ def main() -> int:
     pr2 = gh.add_pr(2, "flow-demo-bot", ["tasks/T-001.md"], heads={"tasks/T-001.md": task("awaiting-confirmation")})
     router.handle("pull_request", {"action": "opened", "pull_request": pr2})
 
-    step("4. GATE: Carol (confirmer) approves PR #2 on GitHub")
-    review = {"state": "APPROVED", "user": {"login": "carol"}, "html_url": "https://github.com/OWNER/flow-demo/pull/2#review", "submitted_at": taskfile.now_iso()}
-    router.handle("pull_request_review", {"review": review, "pull_request": pr2})
+    step("4. GATE: Carol (confirmer) replies in Slack `team chief 确认 T-001`")
+    print("BOT Team Chief relays it to PR #2 as /confirmed-via-slack")
+    slack_ok = f"/confirmed-via-slack by @carol at {taskfile.now_iso()} link:{THREAD}"
+    router.handle("issue_comment", {"issue": {"number": 2, "pull_request": {}, "labels": []},
+                                    "comment": {"user": {"login": "flow-demo-bot"}, "body": slack_ok, "html_url": "c"}})
     print(f"   status now: {status(repo_dir)}")
 
     step("5. Dev Lead writes the plan (PR #3, status unchanged) and starts a Cursor cloud agent")
@@ -135,9 +141,11 @@ def main() -> int:
     router.handle("schedule", {})
     print(f"   status now: {status(repo_dir)}")
 
-    step("9. GATE: Mike (merger) merges PR #4 on GitHub")
-    pr4["merged"] = True
-    router.handle("pull_request", {"action": "closed", "pull_request": pr4})
+    step("9. GATE: Mike (merger) replies in Slack `team chief 合并 #4` (low risk, so allowed)")
+    print("BOT Team Chief relays it to PR #4 as /merge-via-slack")
+    merge = f"/merge-via-slack by @mike at {taskfile.now_iso()} link:{THREAD}"
+    router.handle("issue_comment", {"issue": {"number": 4, "pull_request": {}, "labels": []},
+                                    "comment": {"user": {"login": "flow-demo-bot"}, "body": merge, "html_url": "c"}})
 
     step("10. Acceptance Bot measures on main and opens acceptance PR #5")
     measured = '{"orders": 10000, "runs": 5, "best_seconds": 0.08, "median_seconds": 0.09}'
@@ -145,8 +153,9 @@ def main() -> int:
         "acceptance-proposed", outcome="met", acceptance=f"- Under 1 s: met. Measured: `{measured}`")})
     router.handle("pull_request", {"action": "opened", "pull_request": pr5})
 
-    step("11. GATE: Carol approves the acceptance PR")
-    router.handle("pull_request_review", {"review": dict(review, html_url="https://github.com/OWNER/flow-demo/pull/5#review"), "pull_request": pr5})
+    step("11. GATE: Carol approves the acceptance PR on GitHub (both ways work)")
+    review = {"state": "APPROVED", "user": {"login": "carol"}, "html_url": "https://github.com/OWNER/flow-demo/pull/5#review", "submitted_at": taskfile.now_iso()}
+    router.handle("pull_request_review", {"review": review, "pull_request": pr5})
     print(f"   status now: {status(repo_dir)}")
 
     step("12. Nobody touches anything for 5 hours: timeout sweep on a second, stalled task")

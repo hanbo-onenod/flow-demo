@@ -23,6 +23,8 @@ Only people can change these files. Process-improvement proposals that change ho
 5. **Reply in the language the person used.** Repository files are written in English; quotes from sources stay in their original language.
 6. **Stay in scope.** If a request goes beyond the confirmed scope, stop and ask the team chief to raise an exception. Do not quietly do extra work.
 7. **Leave a trail.** When something goes wrong (you were corrected, you got stuck, a card expired), add a line to the task's Log section in your next PR, starting with `PROBLEM:`.
+8. **Ask people in Slack, not in the Grok app.** When you need a person's answer or decision, ask in the task's Slack thread and end with the exact reply that will move things on, for example ``Reply `team chief 确认 T-003` ``. Do not wait for an answer inside your own run: finish, and the reply wakes the Team Chief, who records it (see `team-chief.md`).
+9. **Never write the words "team chief" in Slack except in your `[Team Chief]` prefix.** They wake the Team Chief.
 
 ## Wake-up payload
 
