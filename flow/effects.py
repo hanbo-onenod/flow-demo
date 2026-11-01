@@ -133,6 +133,17 @@ class LiveEffects:
     def _git(self, *args: str) -> str:
         return subprocess.run(["git", *args], cwd=self.repo_dir, check=True, capture_output=True, text=True).stdout
 
+    def _push(self) -> None:
+        # Another router run may have pushed meanwhile: rebase onto it and retry.
+        for attempt in range(4):
+            try:
+                self._git("push", "origin", "HEAD:main")
+                return
+            except subprocess.CalledProcessError:
+                if attempt == 3:
+                    raise
+                self._git("pull", "--rebase", "origin", "main")
+
     def close_pr(self, number: int, text: str) -> None:
         self.comment(number, text)
         self._gh("PATCH", f"/pulls/{number}", {"state": "closed"})
@@ -144,7 +155,7 @@ class LiveEffects:
         if not self._git("status", "--porcelain", "--", "tasks", "records").strip():
             return
         self._git("commit", "-m", message)
-        self._git("push", "origin", "HEAD:main")
+        self._push()
 
 
 class GitHubReader:
