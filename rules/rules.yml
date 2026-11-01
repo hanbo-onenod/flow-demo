@@ -76,9 +76,11 @@ limits:
   reminders_per_status: 1     # remind once per status, then stay quiet
 
 timeouts_hours:               # remind the role on the right if a task sits in a status this long
+                              # (awaiting-confirmation and acceptance-proposed are read from the open PR)
   awaiting-confirmation: { hours: 2, remind: confirmer }
   awaiting-merge:        { hours: 4, remind: merger }
   acceptance-proposed:   { hours: 4, remind: confirmer }
+  awaiting-acceptance:   { hours: 2, remind: admin }      # the acceptance bot should have drafted by now
   in-progress:           { hours: 8, remind: confirmer }
 
 # Scheduled jobs (times in UTC). The hourly Actions run checks these.

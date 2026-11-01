@@ -14,7 +14,7 @@ class FakeGH:
 
     def add_pr(self, number, author, files, body="", heads=None, sha=None):
         sha = sha or f"sha{number}"
-        pr = {"number": number, "user": {"login": author}, "head": {"sha": sha}, "body": body,
+        pr = {"number": number, "user": {"login": author}, "head": {"sha": sha}, "body": body, "labels": [],
               "html_url": f"https://github.com/{self.repo}/pull/{number}", "title": f"PR {number}", "merged": False}
         self.prs[number] = pr
         self.files[number] = files
@@ -61,6 +61,6 @@ class FakeEffects(RecordingEffects):
 
     def add_label(self, number, label):
         super().add_label(number, label)
-        found = self.gh.issue(number)
+        found = self.gh.issue(number) or self.gh.prs.get(number)
         if found is not None:
             found["labels"].append({"name": label})

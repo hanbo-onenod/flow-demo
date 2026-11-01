@@ -33,7 +33,8 @@ CHAT_CONFIRM = re.compile(r"^/confirmed-via-(card|slack) by @(\S+) at (\S+)(?:.*
 RELAYED_ANSWER = re.compile(r"^Answer from @(\S+) \(via Slack")
 SLACK_MERGE = re.compile(r"^/merge-via-slack by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
 SLACK_RESUME = re.compile(r"^/resume-via-slack (T-\d{3,}) by @(\S+) at (\S+)(?:.*?\blink:(\S+))?", re.MULTILINE)
-SEEN_LABEL = "flow:seen"  # set by the router once it has handled a new candidate
+SEEN_LABEL = "flow:seen"
+REMINDED_LABEL = "flow:reminded"  # on a waiting PR, once its timeout reminder went out  # set by the router once it has handled a new candidate
 SLACK_LINE = re.compile(r"^Slack thread:\s*(\S+)", re.MULTILINE)
 PASSING = {"success", "neutral", "skipped"}
 # Fields only the router writes. A bot PR based on an older version of the task
@@ -580,6 +581,32 @@ class Router:
             taskfile.save(self.repo_dir, task_id, meta, body)
             self.record_problem("timeout", task_id, f"{status} over {timer['hours']}h")
             self.fx.commit(f"{task_id}: timeout reminder ({status})")
+        self.sweep_waiting_prs(open_prs if open_prs is not None else self.gh.open_prs())
+
+    def sweep_waiting_prs(self, open_prs: list[dict]) -> None:
+        """Timeouts for statuses that only exist inside an open PR: a task package
+        waiting for confirmation, an acceptance draft waiting for the confirmer.
+        Main never shows them, so the loop above cannot see them."""
+        timers = self.rules.get("timeouts_hours", {})
+        for pr in open_prs:
+            if pr["user"]["login"] not in self.bot_logins or not pr.get("created_at"):
+                continue
+            if REMINDED_LABEL in {label["name"] for label in pr.get("labels", [])}:
+                continue
+            kind, tasks = self.classify(pr["number"])
+            pending = [t for t, k in tasks.items() if k == "approval"] if kind == "task" else []
+            for task_id in pending:
+                head = self.gh.file_at(pr["head"]["sha"], f"tasks/{task_id}.md")
+                meta = taskfile.parse(head)[0] if head else {}
+                timer = timers.get(meta.get("status"))
+                if not timer or self.now - parse_time(pr["created_at"]) < timedelta(hours=timer["hours"]):
+                    continue
+                who = self.mention(self.role_login(timer["remind"], meta))
+                self.fx.slack_thread(meta.get("slack_thread", ""),
+                                     f"[Flow] {task_id} has been {meta['status']} for over {timer['hours']}h. {who}, can you take a look? {pr['html_url']}")
+                self.fx.add_label(pr["number"], REMINDED_LABEL)
+                self.record_problem("timeout", task_id, f"{meta['status']} over {timer['hours']}h", pr["html_url"])
+                self.fx.commit(f"{task_id}: timeout reminder ({meta['status']})")
 
     # ---------- task summary ----------
 

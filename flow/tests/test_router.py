@@ -442,3 +442,28 @@ def test_pause_remembers_status_and_confirmer_resumes_via_slack(env):
     meta = status_of(tmp_path)
     assert meta["status"] == "in-progress" and not meta["paused_from"]
     assert wakes(fx) == [("dev_lead", "status.resumed")]
+
+
+def test_waiting_task_package_pr_gets_one_timeout_reminder(env):
+    router, gh, fx, _ = env
+    pr = open_package_pr(gh)
+    pr["created_at"] = (NOW - timedelta(hours=3)).isoformat()
+    router.handle("schedule", {})
+    router.handle("schedule", {})
+    reminders = [c for c in fx.calls if c[0] == "slack_thread" and "awaiting-confirmation for over 2h" in c[2]]
+    assert len(reminders) == 1 and "carol" in reminders[0][2]
+    assert ("add_label", 10, "flow:reminded") in fx.calls
+
+
+def test_young_task_package_pr_is_not_reminded(env):
+    router, gh, fx, _ = env
+    open_package_pr(gh)["created_at"] = (NOW - timedelta(minutes=30)).isoformat()
+    router.handle("schedule", {})
+    assert not [c for c in fx.calls if c[0] == "slack_thread"]
+
+
+def test_stuck_acceptance_reminds_the_admin(env):
+    router, _, fx, tmp_path = env
+    write_task(tmp_path, "awaiting-acceptance", updated=(NOW - timedelta(hours=3)).isoformat())
+    router.handle("schedule", {})
+    assert any(c[0] == "slack_thread" and "awaiting-acceptance for over 2h" in c[2] for c in fx.calls)
