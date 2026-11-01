@@ -25,9 +25,9 @@ on:
         options: [sweep, outer_loop, process_improvement]
         default: sweep
 
-concurrency:
-  group: flow-router            # one at a time, in order
-  cancel-in-progress: false
+# No concurrency group on purpose: GitHub keeps only one pending run per
+# group and cancels the rest, which would drop events (an issue created with
+# two labels fires three at once). Runs that race on main rebase and retry.
 
 permissions:
   contents: read
