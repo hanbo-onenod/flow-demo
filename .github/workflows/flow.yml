@@ -1,0 +1,68 @@
+name: Flow router
+
+# Every event that can move a task forward ends up here. The router reads
+# rules/rules.yml and decides the next step; no AI is involved in this job.
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  pull_request_target:          # runs the workflow from main, never from the PR
+    types: [opened, reopened, synchronize, closed]
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  schedule:
+    - cron: "7 * * * *"         # hourly: timeouts, late checks, daily/weekly jobs
+  workflow_dispatch:
+    inputs:
+      job:
+        description: What to run now
+        type: choice
+        options: [sweep, outer_loop, process_improvement]
+        default: sweep
+
+concurrency:
+  group: flow-router            # one at a time, in order
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          # The deploy key is the only actor allowed to bypass branch protection.
+          # The router uses it to write task status and apply bots' tasks/ PRs.
+          ssh-key: ${{ secrets.FLOW_DEPLOY_KEY }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Route
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_BOARD_CHANNEL: ${{ vars.SLACK_BOARD_CHANNEL }}
+          GROK_WEBHOOK_TOKEN: ${{ secrets.GROK_WEBHOOK_TOKEN }}
+          GROK_WEBHOOK_PRODUCT: ${{ secrets.GROK_WEBHOOK_PRODUCT }}
+          GROK_WEBHOOK_DEV_LEAD: ${{ secrets.GROK_WEBHOOK_DEV_LEAD }}
+          GROK_WEBHOOK_ACCEPTANCE: ${{ secrets.GROK_WEBHOOK_ACCEPTANCE }}
+          GROK_WEBHOOK_OUTER_LOOP: ${{ secrets.GROK_WEBHOOK_OUTER_LOOP }}
+          GROK_WEBHOOK_PROCESS_IMPROVEMENT: ${{ secrets.GROK_WEBHOOK_PROCESS_IMPROVEMENT }}
+        run: |
+          git config user.name "flow-router"
+          git config user.email "flow-router@users.noreply.github.com"
+          EVENT="${GITHUB_EVENT_NAME%_target}"
+          python -m flow.router --event "$EVENT" --payload "$GITHUB_EVENT_PATH" --repo "$GITHUB_REPOSITORY"

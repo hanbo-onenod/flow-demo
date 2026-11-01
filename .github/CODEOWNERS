@@ -1,0 +1,5 @@
+# Changes to the flow itself need the admin's review.
+/rules/      @hanbo-onenod
+/bots/       @hanbo-onenod
+/flow/       @hanbo-onenod
+/.github/    @hanbo-onenod

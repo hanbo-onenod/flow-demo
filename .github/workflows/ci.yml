@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml pytest
+      - name: Tests
+        env:
+          # Set the repository variable FLOW_DEMO_FLAKY_RATE=1 for the circuit-breaker drill.
+          FLOW_DEMO_FLAKY_RATE: ${{ vars.FLOW_DEMO_FLAKY_RATE }}
+        run: pytest -q tests flow/tests
+      - name: End-to-end simulation
+        run: python scripts/simulate_flow.py > /dev/null && python scripts/simulate_flow.py --breaker > /dev/null

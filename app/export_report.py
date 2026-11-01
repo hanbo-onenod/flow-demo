@@ -1,0 +1,66 @@
+"""Export orders to CSV.
+
+Usage:
+    python -m app.export_report out.csv [--db path.sqlite]
+
+Known problems (planted for the demo, do not fix them outside a task):
+- Slow: one customer lookup per order, on an unindexed column.
+- Excel shows Chinese names as garbage: the CSV has no UTF-8 BOM.
+- No date filter and no Excel export.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import sqlite3
+import sys
+
+from app import db
+
+HEADER = ["order_no", "order_date", "customer", "city", "amount"]
+
+
+def fetch_rows(conn: sqlite3.Connection) -> list[list[str]]:
+    rows = []
+    for order in conn.execute("SELECT * FROM orders ORDER BY order_date, order_no"):
+        customer = conn.execute(
+            "SELECT name, city FROM customers WHERE customer_code = ?", (order["customer_code"],)
+        ).fetchone()
+        rows.append(
+            [
+                str(order["order_no"]),
+                order["order_date"],
+                customer["name"],
+                customer["city"],
+                f"{order['amount_cents'] / 100:.2f}",
+            ]
+        )
+    return rows
+
+
+def export_csv(conn: sqlite3.Connection, path: str) -> int:
+    rows = fetch_rows(conn)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(HEADER)
+        writer.writerows(rows)
+    return len(rows)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Export orders to CSV")
+    parser.add_argument("out")
+    parser.add_argument("--db", default=None, help="SQLite file; default is a freshly seeded in-memory demo DB")
+    args = parser.parse_args(argv)
+    if args.db:
+        conn = db.connect(args.db)
+    else:
+        conn = db.connect()
+        db.seed(conn)
+    count = export_csv(conn, args.out)
+    print(f"exported {count} rows to {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

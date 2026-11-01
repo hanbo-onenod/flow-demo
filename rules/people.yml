@@ -1,0 +1,14 @@
+# Who plays which role in the demo, and how to mention them in Slack.
+# Fill in real values during setup (docs/setup in the v2 folder explains how).
+# slack_id looks like U0123ABCD. Leave it empty and the router falls back to the GitHub login.
+
+people:
+  - github: hanbo-onenod
+    slack_id: ""
+    name: Hanbo
+
+roles:
+  requirement_owner: hanbo-onenod
+  admin: hanbo-onenod          # receives circuit-breaker alerts, approves process changes
+  default_confirmer: hanbo-onenod
+  default_merger: hanbo-onenod

@@ -1,0 +1,93 @@
+# Flow rules. GitHub Actions (flow/router.py) reads this file and nothing else
+# to decide what happens next. No AI judgement here.
+#
+# Only people can change this file (protected path, PR + approval).
+# Process-improvement proposals that change the flow edit this file.
+
+version: 1
+
+# Task statuses, in order. A task file lives at tasks/T-NNN.md.
+statuses:
+  - awaiting-confirmation   # task package PR is open, waiting for the confirmer
+  - confirmed               # confirmer approved; dev lead is woken
+  - in-progress             # dev lead has started execution sessions
+  - awaiting-merge          # all checks passed, waiting for the merger
+  - awaiting-acceptance     # code merged; acceptance bot is drafting
+  - acceptance-proposed     # acceptance draft PR is open, waiting for the confirmer
+  - closed                  # done (outcome: met / not-met / cancelled)
+  - paused                  # stopped by an exception or the circuit breaker
+
+# What happens on each event. "wake" calls the bot's Grok webhook.
+# The task_pr.* rows describe fixed behaviour in flow/router.py (who may merge
+# what is a safety rule, so it is not configurable here); edit the others freely.
+# "notify" posts in the task's Slack thread and mentions that role.
+# "board" posts one line to the board channel.
+events:
+  intake.opened:             # minutes or a document arrived (label source:minutes / source:doc)
+    wake: product
+    board: true
+  candidate.opened:          # any other issue labelled "candidate" was opened
+    notify: requirement_owner
+    board: true
+  candidate.accepted:        # requirement owner added the "accepted" label
+    wake: product
+    board: true
+  candidate.human_reply:     # a person commented on a candidate labelled "clarifying"
+    wake: product
+  task_pr.opened:            # bot opened a PR that changes tasks/
+    notify: confirmer
+    board: true
+  task_pr.approved:          # the task's confirmer approved that PR on GitHub
+    merge: true
+  task_pr.card_confirmed:    # team chief recorded an approval-card confirmation
+    merge: true
+  status.confirmed:
+    wake: dev_lead
+    set_status: in-progress
+    board: true
+  code_pr.checks_passed:
+    set_status: awaiting-merge
+    notify: merger
+    board: true
+  code_pr.checks_failed:
+    wake: dev_lead            # until the failure limit below is reached
+    record_problem: check-failure
+  code_pr.changes_requested:
+    wake: dev_lead
+    record_problem: rework
+  code_pr.merged:            # acceptance starts once no code PR for the task is still open
+    set_status: awaiting-acceptance
+    wake: acceptance
+    board: true
+  status.closed:
+    write_summary: true
+    notify: requester
+    board: true
+  status.paused:
+    notify: confirmer
+    board: true
+
+# Limits and timers.
+limits:
+  failures_per_task: 3        # circuit breaker: pause the task after this many failed check runs
+  reminders_per_status: 1     # remind once per status, then stay quiet
+
+timeouts_hours:               # remind the role on the right if a task sits in a status this long
+  awaiting-confirmation: { hours: 2, remind: confirmer }
+  awaiting-merge:        { hours: 4, remind: merger }
+  acceptance-proposed:   { hours: 4, remind: confirmer }
+  in-progress:           { hours: 8, remind: confirmer }
+
+# Scheduled jobs (times in UTC). The hourly Actions run checks these.
+schedules:
+  outer_loop:          { every: day,  hour_utc: 1, wake: outer_loop }           # 09:00 Beijing / Singapore
+  process_improvement: { every: week, weekday: monday, hour_utc: 2, wake: process_improvement }
+
+# Only these paths may be merged by the router itself. Everything else is merged by people.
+router_may_merge_paths:
+  - tasks/
+  - records/
+
+# Bots whose PRs are trusted to change task status (their GitHub login).
+bot_logins:
+  - flow-demo-bot

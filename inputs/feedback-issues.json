@@ -1,0 +1,9 @@
+[
+  {"title": "导出的 CSV 用 Excel 打开中文是乱码", "body": "客户名称一列全是乱码，用 WPS 打开是正常的。\n\n(fictional feedback for the demo)"},
+  {"title": "Chinese characters broken in exported CSV", "body": "Opening orders.csv in Excel on Windows shows garbage instead of customer names.\n\n(fictional feedback for the demo)"},
+  {"title": "Excel 打开报表，名字显示成问号和奇怪符号", "body": "Mac 上的 Excel 也一样。\n\n(fictional feedback for the demo)"},
+  {"title": "Export encoding issue", "body": "Customer names in the CSV look like 'ç\u008e\u008bä¼\u009f' in Excel. Please fix.\n\n(fictional feedback for the demo)"},
+  {"title": "CSV 乱码，财务没法直接用", "body": "每次都要先用记事本另存为 UTF-8 BOM 才行。\n\n(fictional feedback for the demo)"},
+  {"title": "导出报表要等很久", "body": "点了导出要等好几秒，数据多的时候更慢。\n\n(fictional feedback for the demo)"},
+  {"title": "Export takes forever", "body": "10k orders take around 5 seconds to export. Used to be fine.\n\n(fictional feedback for the demo)"}
+]
