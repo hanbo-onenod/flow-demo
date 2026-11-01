@@ -21,7 +21,6 @@ def connect(path: str = ":memory:") -> sqlite3.Connection:
 
 
 def create_schema(conn: sqlite3.Connection) -> None:
-    # customer_code has no index. That is one of the planted problems.
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS customers (
@@ -35,8 +34,24 @@ def create_schema(conn: sqlite3.Connection) -> None:
             order_date TEXT NOT NULL,
             amount_cents INTEGER NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_customers_customer_code
+            ON customers (customer_code);
         """
     )
+
+
+def customers_by_code(conn: sqlite3.Connection) -> dict[str, tuple[str, str]]:
+    """First name and city for each customer_code, in table order.
+
+    Same row a per-order ``SELECT name, city FROM customers WHERE
+    customer_code = ?`` ``fetchone()`` used to return: the lowest rowid.
+    """
+    found: dict[str, tuple[str, str]] = {}
+    for row in conn.execute("SELECT customer_code, name, city FROM customers ORDER BY rowid"):
+        code = row["customer_code"]
+        if code not in found:
+            found[code] = (row["name"], row["city"])
+    return found
 
 
 def make_order_numbers(n: int, rng: random.Random) -> list[int]:
