@@ -4,7 +4,6 @@ Usage:
     python -m app.export_report out.csv [--db path.sqlite]
 
 Known problems (planted for the demo, do not fix them outside a task):
-- Slow: one customer lookup per order, on an unindexed column.
 - Excel shows Chinese names as garbage: the CSV has no UTF-8 BOM.
 - No date filter and no Excel export.
 """
@@ -21,17 +20,16 @@ HEADER = ["order_no", "order_date", "customer", "city", "amount"]
 
 
 def fetch_rows(conn: sqlite3.Connection) -> list[list[str]]:
+    customers = db.customers_by_code(conn)
     rows = []
     for order in conn.execute("SELECT * FROM orders ORDER BY order_date, order_no"):
-        customer = conn.execute(
-            "SELECT name, city FROM customers WHERE customer_code = ?", (order["customer_code"],)
-        ).fetchone()
+        name, city = customers[order["customer_code"]]
         rows.append(
             [
                 str(order["order_no"]),
                 order["order_date"],
-                customer["name"],
-                customer["city"],
+                name,
+                city,
                 f"{order['amount_cents'] / 100:.2f}",
             ]
         )
