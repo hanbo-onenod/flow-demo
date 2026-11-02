@@ -38,6 +38,7 @@ permissions:
   issues: write
   pull-requests: write
   checks: read
+  actions: write               # re-run a failed CI job once (rules.yml limits.reruns_per_commit)
 
 jobs:
   route:

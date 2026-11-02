@@ -87,6 +87,9 @@ class RecordingEffects:
     def merge_code_pr(self, number: int, message: str) -> None:
         self.calls.append(("merge_code_pr", number, message))
 
+    def rerun_failed_checks(self, sha: str) -> None:
+        self.calls.append(("rerun_failed_checks", sha))
+
     def names(self) -> list[str]:
         return [c[0] for c in self.calls]
 
@@ -179,6 +182,14 @@ class LiveEffects:
         self._git("merge", "--no-ff", "FETCH_HEAD", "-m", message)
         self._push()
 
+    def rerun_failed_checks(self, sha: str) -> None:
+        # Re-runs only the failed jobs of the commit's workflow runs, not the router itself.
+        runs = self._gh("GET", f"/actions/runs?head_sha={sha}&status=failure&per_page=100").get("workflow_runs", [])
+        for run in runs:
+            if run.get("path") != ".github/workflows/flow.yml":
+                self._gh("POST", f"/actions/runs/{run['id']}/rerun-failed-jobs")
+                print(f"re-running failed jobs of {run.get('name')} #{run['id']}")
+
     def close_pr(self, number: int, text: str) -> None:
         self.comment(number, text)
         self._gh("PATCH", f"/pulls/{number}", {"state": "closed"})
@@ -240,6 +251,6 @@ class GitHubReader:
         return base64.b64decode(data["content"]).decode()
 
     def check_states(self, sha: str) -> list[tuple[str, str | None, int]]:
-        """Latest run of each check on the commit: (status, conclusion, run id)."""
+        """Latest run of each check on the commit: (status, conclusion, run id, app)."""
         runs = self._get(f"/commits/{sha}/check-runs?per_page=100&filter=latest")["check_runs"]
-        return [(r["status"], r["conclusion"], r["id"]) for r in runs]
+        return [(r["status"], r["conclusion"], r["id"], (r.get("app") or {}).get("slug")) for r in runs]

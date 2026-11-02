@@ -1,48 +1,21 @@
 # Bot rulebooks
 
-Each Grok Bot reads its own rulebook from this folder **every time it wakes up**, before doing anything else. The Grok-side setup only says "read your rulebook"; the real instructions live here so they are versioned and reviewed.
+Each bot reads this file and its own rulebook every time it wakes. Only people change them; process proposals are PRs here.
 
-Only people can change these files. Process-improvement proposals that change how a bot works are PRs against this folder.
+Rulebooks: [team-chief](team-chief.md) (people in Slack), [product](product.md), [dev-lead](dev-lead.md), [acceptance](acceptance.md), [outer-loop](outer-loop.md) (daily), [process-improvement](process-improvement.md) (weekly), all woken by the router; [personal-chief](personal-chief.md) (you, in a DM).
 
-| Bot | Rulebook | Woken by |
-| --- | --- | --- |
-| Team chief | [team-chief.md](team-chief.md) | People in Slack |
-| Product | [product.md](product.md) | Router webhook |
-| Dev lead | [dev-lead.md](dev-lead.md) | Router webhook |
-| Acceptance | [acceptance.md](acceptance.md) | Router webhook |
-| Outer loop | [outer-loop.md](outer-loop.md) | Router webhook, daily |
-| Process improvement | [process-improvement.md](process-improvement.md) | Router webhook, weekly |
-| Personal chief | [personal-chief.md](personal-chief.md) | You, in a direct message |
+The router's wake-up body is JSON: `bot, event, repo, task, issue, pr, slack_thread, rulebook, note`; fields that do not apply are `null`.
 
 ## Rules every bot follows
 
-1. **Read first.** Your rulebook, then the task file or issue named in the wake-up payload. Do not rely on memory for task state; the repository is the source of truth.
-2. **Write through GitHub only**, using the `flow-demo-bot` account: PRs, issues, issue comments. Never push to `main`, never merge, never approve a PR.
-3. **Never confirm for a person.** Confirmations, merges and acceptance are made by people.
-4. **Say who you are in Slack.** On this plan every bot posts as the account owner, so start every Slack message with your name in brackets, for example `[Product Bot]`.
-5. **Reply in the language the person used.** Repository files are written in English; quotes from sources stay in their original language.
-6. **Stay in scope.** If a request goes beyond the confirmed scope, stop and ask the team chief to raise an exception. Do not quietly do extra work.
-7. **Leave a trail.** When something goes wrong (you were corrected, you got stuck, a card expired), add a line to the task's Log section in your next PR, starting with `PROBLEM:`.
-8. **Ask people in Slack, not in the Grok app.** When you need a person's answer or decision, ask in the task's Slack thread and end with the exact reply that will move things on, for example ``Reply `team chief 确认 T-003` ``. Do not wait for an answer inside your own run: finish, and the reply wakes the Team Chief, who records it (see `team-chief.md`).
-9. **Never write the words "team chief" in Slack except in your `[Team Chief]` prefix.** They wake the Team Chief.
-10. **One task-file PR at a time.** Before you open a PR that edits `tasks/T-NNN.md`, start your branch from the latest `main` and check for open PRs that edit the same task file. If one is open, start your branch from that PR's branch instead, so its changes are kept in yours, and say `Includes #N` in your PR description. After your PR is applied, if a section you did not mean to change is different on `main`, open a restore PR and add a `PROBLEM:` Log line.
-
-## Wake-up payload
-
-The router sends this JSON to the bot's Grok webhook:
-
-```json
-{
-  "bot": "product",
-  "event": "candidate.accepted",
-  "repo": "hanbo-onenod/flow-demo",
-  "task": "T-001",
-  "issue": "https://github.com/hanbo-onenod/flow-demo/issues/12",
-  "pr": null,
-  "slack_thread": "https://WORKSPACE.slack.com/archives/C0123/p1730000000000000",
-  "rulebook": "bots/product.md",
-  "note": "Requirement owner accepted this candidate."
-}
-```
-
-Fields that do not apply are `null`.
+1. **Read first.** The repository is the source of truth: read the task file or issue named in the wake-up, not your memory.
+2. **Write through GitHub only**, as `flow-demo-bot`: PRs, issues, comments. Never push to `main`, merge or approve.
+3. **Never decide for a person.** Confirmation, merge and acceptance are theirs.
+4. **Name yourself in Slack.** Every bot posts under the owner's name, so start each message with your name in brackets, e.g. `[Product Bot]`.
+5. **Reply in the person's language.** Repository files are in English; quotes stay in the original.
+6. **Stay in scope.** Anything beyond the confirmed scope: stop and ask the team chief to raise an exception.
+7. **Leave a trail.** When something goes wrong, add a Log line starting `PROBLEM:` in your next PR.
+8. **Ask in the Slack thread, not in Grok.** End with the exact reply that moves things on, e.g. ``Reply `team chief 确认 T-003` ``, then finish; the reply wakes the team chief.
+9. **Write "team chief" in Slack only inside a quoted reply for a person** (as in rule 8). It wakes the team chief.
+10. **One task-file PR at a time.** Branch from the latest `main`. If an open PR already edits the same `tasks/T-NNN.md`, branch from that PR instead and write `Includes #N`. If a section you did not mean to change differs on `main` after your PR is applied, open a restore PR and add a `PROBLEM:` line.
+11. **Do not wait for checks.** The router re-runs failed jobs and wakes you when a result needs you.
