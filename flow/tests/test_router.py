@@ -532,6 +532,7 @@ def test_manual_run_wakes_even_with_nothing_new(env):
 def test_only_code_prs_ask_bugbot_for_a_review(env):
     router, gh, fx, tmp_path = env
     write_task(tmp_path, "in-progress")
+    router.rules["review_comment"] = "bugbot run"
     pr = code_pr(gh)
     router.handle("pull_request", {"action": "opened", "pull_request": pr})
     router.handle("pull_request", {"action": "synchronize", "pull_request": pr})
