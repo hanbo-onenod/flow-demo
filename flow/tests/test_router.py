@@ -246,8 +246,13 @@ def test_timeout_reminds_once(env):
     assert len(reminders) == 1
 
 
+def feedback_issue(number, *labels):
+    return {"number": number, "title": "slow", "labels": [{"name": n} for n in ("feedback", *labels)]}
+
+
 def test_daily_schedule_wakes_outer_loop_at_its_hour(env):
-    router, _, fx, _ = env
+    router, gh, fx, _ = env
+    gh.issues = [feedback_issue(5)]
     router.handle("schedule", {})
     assert wakes(fx) == [("outer_loop", "schedule.outer_loop")]
     router.now = NOW.replace(hour=5)
@@ -502,3 +507,62 @@ def test_stale_plan_pr_does_not_undo_a_status_change(env):
     router.handle("pull_request", {"action": "opened", "pull_request": pr})
     meta, body = taskfile.load(str(tmp_path), "T-001")
     assert meta["status"] == "awaiting-merge" and "Faster, with a plan." in body
+
+
+def test_scheduled_bots_sleep_when_there_is_nothing_new(env):
+    router, gh, fx, tmp_path = env
+    gh.issues = [feedback_issue(5, "triaged")]
+    router.handle("schedule", {})
+    assert wakes(fx) == []
+    router.now = datetime(2026, 11, 2, 2, 5, tzinfo=timezone.utc)  # Monday, process improvement hour
+    router.handle("schedule", {})
+    assert wakes(fx) == []
+    (tmp_path / "records" / "problems.jsonl").write_text(
+        json.dumps({"time": "2026-11-01T08:53:06+00:00", "kind": "rework"}) + "\n", encoding="utf-8")
+    router.handle("schedule", {})
+    assert wakes(fx) == [("process_improvement", "schedule.process_improvement")]
+
+
+def test_manual_run_wakes_even_with_nothing_new(env):
+    router, _, fx, _ = env
+    router.handle("workflow_dispatch", {"inputs": {"job": "outer_loop"}})
+    assert wakes(fx) == [("outer_loop", "schedule.outer_loop")]
+
+
+def test_only_code_prs_ask_bugbot_for_a_review(env):
+    router, gh, fx, tmp_path = env
+    write_task(tmp_path, "in-progress")
+    pr = code_pr(gh)
+    router.handle("pull_request", {"action": "opened", "pull_request": pr})
+    router.handle("pull_request", {"action": "synchronize", "pull_request": pr})
+    task = gh.add_pr(31, "flow-demo-bot", ["tasks/T-001.md"], heads={"tasks/T-001.md": task_text("in-progress")})
+    router.handle("pull_request", {"action": "opened", "pull_request": task})
+    assert [c[1:] for c in fx.calls if c[0] == "comment"] == [(20, "bugbot run"), (20, "bugbot run")]
+
+
+def test_failed_ci_job_is_rerun_once_before_waking_dev_lead(env):
+    router, gh, fx, tmp_path = env
+    write_task(tmp_path, "in-progress")
+    code_pr(gh)
+    run = {"workflow_run": {"name": "CI", "status": "completed", "pull_requests": [{"number": 20}]}}
+    gh.checks["abc1234"] = [("completed", "failure", 1, "github-actions"), ("completed", "success", 2, "cursor")]
+    router.handle("workflow_run", run)
+    assert ("rerun_failed_checks", "abc1234") in fx.calls and wakes(fx) == []
+    assert status_of(tmp_path)["failures"] == 0
+    gh.checks["abc1234"] = [("completed", "failure", 3, "github-actions"), ("completed", "success", 2, "cursor")]
+    router.handle("workflow_run", run)
+    assert wakes(fx) == [("dev_lead", "code_pr.checks_failed")]
+    assert status_of(tmp_path)["failures"] == 1
+    assert fx.names().count("rerun_failed_checks") == 1
+
+
+def test_rerun_passes_and_nobody_is_woken(env):
+    router, gh, fx, tmp_path = env
+    write_task(tmp_path, "in-progress")
+    code_pr(gh)
+    run = {"workflow_run": {"name": "CI", "status": "completed", "pull_requests": [{"number": 20}]}}
+    gh.checks["abc1234"] = [("completed", "failure", 1, "github-actions")]
+    router.handle("workflow_run", run)
+    gh.checks["abc1234"] = [("completed", "success", 3, "github-actions")]
+    router.handle("workflow_run", run)
+    assert wakes(fx) == [] and status_of(tmp_path)["status"] == "awaiting-merge"

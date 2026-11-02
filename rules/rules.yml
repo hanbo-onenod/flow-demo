@@ -74,6 +74,7 @@ events:
 limits:
   failures_per_task: 3        # circuit breaker: pause the task after this many failed check runs
   reminders_per_status: 1     # remind once per status, then stay quiet
+  reruns_per_commit: 1        # re-run failed GitHub Actions jobs once before waking the dev lead (0 = off)
 
 timeouts_hours:               # remind the role on the right if a task sits in a status this long
                               # (awaiting-confirmation and acceptance-proposed are read from the open PR)
@@ -84,9 +85,15 @@ timeouts_hours:               # remind the role on the right if a task sits in a
   in-progress:           { hours: 8, remind: confirmer }
 
 # Scheduled jobs (times in UTC). The hourly Actions run checks these.
+# only_if_new: skip the wake-up when there is nothing to look at (no untriaged
+# feedback; no problem recorded in the last 7 days). A manual run always wakes.
 schedules:
-  outer_loop:          { every: day,  hour_utc: 1, wake: outer_loop }           # 09:00 Beijing / Singapore
-  process_improvement: { every: week, weekday: monday, hour_utc: 2, wake: process_improvement }
+  outer_loop:          { every: day,  hour_utc: 1, wake: outer_loop, only_if_new: true }           # 09:00 Beijing / Singapore
+  process_improvement: { every: week, weekday: monday, hour_utc: 2, wake: process_improvement, only_if_new: true }
+
+# Bugbot is set to "Manual Only" in Cursor. The router posts this comment on
+# code PRs (opened and every new push), so task-file PRs are never reviewed.
+review_comment: "bugbot run"
 
 # Merging code: people merge on GitHub, or say `team chief 合并 #N` in the
 # task's Slack thread and the router merges for them, if the risk allows.

@@ -39,7 +39,7 @@ SLACK_LINE = re.compile(r"^Slack thread:\s*(\S+)", re.MULTILINE)
 PASSING = {"success", "neutral", "skipped"}
 # Fields only the router writes. A bot PR based on an older version of the task
 # file must not overwrite them.
-ROUTER_FIELDS = ("failures", "confirmation", "checked_sha", "checked_runs", "paused_from", "reminded_status", "notified_status", "created", "updated")
+ROUTER_FIELDS = ("failures", "confirmation", "checked_sha", "checked_runs", "rerun_sha", "paused_from", "reminded_status", "notified_status", "created", "updated")
 
 
 def parse_time(value) -> datetime:
@@ -281,7 +281,13 @@ class Router:
         if action not in ("opened", "reopened", "synchronize"):
             return
         kind, tasks = self.classify(pr["number"])
-        if kind == "code" or pr["user"]["login"] not in self.bot_logins:
+        if kind == "code":
+            # Bugbot runs in "Manual Only" mode, so only code PRs get a review;
+            # task-file PRs are plain text and are not worth one.
+            if self.rules.get("review_comment"):
+                self.fx.comment(pr["number"], self.rules["review_comment"])
+            return
+        if pr["user"]["login"] not in self.bot_logins:
             return
         if any(k == "invalid" for k in tasks.values()):
             self.fx.comment(pr["number"], "[Flow] This PR changes a task status in a way only the router may. "
@@ -537,6 +543,17 @@ class Router:
             if meta.get("status") == "in-progress":
                 self.apply("code_pr.checks_passed", task_id, pr=pr, note="All checks passed")
             return
+        # A failed GitHub Actions job is re-run once per commit before anyone is
+        # woken: an unstable test should not cost a Dev Lead run (or a person).
+        failed_jobs = [s for s in states if s[1] not in PASSING and len(s) > 3 and s[3] == "github-actions"]
+        if failed_jobs and self.rules["limits"].get("reruns_per_commit", 0) and meta.get("rerun_sha") != sha:
+            meta["rerun_sha"] = sha
+            taskfile.save(self.repo_dir, task_id, meta, body)
+            self.fx.commit(f"{task_id}: re-run failed checks on {sha[:7]}")
+            self.fx.rerun_failed_checks(sha)
+            self.fx.slack_thread(meta.get("slack_thread", ""), f"[Flow] {task_id}: checks failed on {sha[:7]}. "
+                                                                f"Re-running the failed jobs once before waking Dev Lead. {pr['html_url']}")
+            return
         meta["failures"] = int(meta.get("failures") or 0) + 1
         taskfile.save(self.repo_dir, task_id, meta, body)
         self.fx.commit(f"{task_id}: check failure {meta['failures']}")
@@ -561,7 +578,29 @@ class Router:
                 continue
             if job["every"] == "week" and self.now.strftime("%A").lower() != job["weekday"]:
                 continue
+            if job.get("only_if_new") and not self.has_new_input(name):
+                print(f"skip {name}: nothing new")
+                continue
             self.fx.wake(job["wake"], self.wake_payload(job["wake"], f"schedule.{name}", note=f"Scheduled {name}"))
+
+    def has_new_input(self, job: str) -> bool:
+        """Whether a scheduled bot has anything to look at. A manual run always wakes it."""
+        if job == "outer_loop":
+            return any("triaged" not in self.labels(i) for i in self.gh.open_issues("feedback"))
+        if job == "process_improvement":
+            since = self.now - timedelta(days=7)
+            path = os.path.join(self.repo_dir, "records", "problems.jsonl")
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
+                    if any(parse_time(json.loads(line)["time"]) >= since for line in f if line.strip()):
+                        return True
+            for name in os.listdir(os.path.join(self.repo_dir, "tasks")):
+                if taskfile.is_task_path(f"tasks/{name}"):
+                    meta, body = taskfile.load(self.repo_dir, name[:-3])
+                    if "PROBLEM:" in body and meta.get("updated") and parse_time(meta["updated"]) >= since:
+                        return True
+            return False
+        return True
 
     def on_dispatch(self, payload: dict) -> None:
         job = (payload.get("inputs") or {}).get("job", "sweep")
