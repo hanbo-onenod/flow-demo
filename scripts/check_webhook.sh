@@ -16,3 +16,5 @@ curl -sS -X POST "$GROK_WEBHOOK_URL" "${AUTH[@]}" -H "Content-Type: application/
 EOF
 echo
 echo "Sent. A 2xx answer only means the routine started; check the Slack thread for the reply."
+
+# Test PR only: checks that the router asks Bugbot to review code PRs. Will be closed, not merged.
