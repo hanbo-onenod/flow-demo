@@ -91,9 +91,11 @@ schedules:
   outer_loop:          { every: day,  hour_utc: 1, wake: outer_loop, only_if_new: true }           # 09:00 Beijing / Singapore
   process_improvement: { every: week, weekday: monday, hour_utc: 2, wake: process_improvement, only_if_new: true }
 
-# Bugbot is set to "Manual Only" in Cursor. The router posts this comment on
-# code PRs (opened and every new push), so task-file PRs are never reviewed.
-review_comment: "bugbot run"
+# With Bugbot in "Manual Only" mode, the router would post this comment on code
+# PRs so task-file PRs are not reviewed. Off for now: Bugbot answered
+# "Unable to authenticate" to `bugbot run` on this repo (PR #55), so it stays
+# on "Every Push". Set to "bugbot run" once manual triggers work.
+review_comment: ""
 
 # Merging code: people merge on GitHub, or say `team chief 合并 #N` in the
 # task's Slack thread and the router merges for them, if the risk allows.
